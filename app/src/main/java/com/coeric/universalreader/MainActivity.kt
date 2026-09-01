@@ -112,7 +112,7 @@ fun UniversalReaderHome() {
                 ) {
                     Icon(
                         imageVector = Icons.Default.UploadFile,
-                        contentDescription = null
+                       contentDescription = null
                     )
 
                     Spacer(modifier = Modifier.padding(horizontal = 4.dp))
