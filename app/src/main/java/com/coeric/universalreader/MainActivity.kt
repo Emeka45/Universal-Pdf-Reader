@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.coeric.universalreader
 
 import android.os.Bundle
@@ -112,7 +114,7 @@ fun UniversalReaderHome() {
                 ) {
                     Icon(
                         imageVector = Icons.Default.UploadFile,
-                       contentDescription = null
+                        contentDescription = null
                     )
 
                     Spacer(modifier = Modifier.padding(horizontal = 4.dp))
