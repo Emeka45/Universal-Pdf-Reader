@@ -2,11 +2,13 @@ package com.coeric.universalreader
 
 import android.content.Context
 import android.net.Uri
+import android.util.Xml
 import org.xmlpull.v1.XmlPullParser
-import java.io.InputStream
-import java.util.zip.ZipFile
 import java.io.File
+import java.io.InputStream
+import java.net.URLDecoder
 import java.nio.charset.Charset
+import java.util.zip.ZipFile
 
 object EpubReader {
 
@@ -63,45 +65,31 @@ object EpubReader {
                     }
 
                 val basePath =
-                    rootFile
-                        .substringBeforeLast(
-                            '/',
-                            ""
-                        )
+                    rootFile.substringBeforeLast(
+                        '/',
+                        ""
+                    )
 
                 val chapters =
                     mutableListOf<EpubChapter>()
 
                 for (
-                    item in opf.spine
+                    spineId in opf.spine
                 ) {
 
-                    val manifestItem =
-                        opf.manifest[item]
-
-                    if (
-                        manifestItem == null
-                    ) {
-                        continue
-                    }
+                    val item =
+                        opf.manifest[spineId]
+                            ?: continue
 
                     val fullPath =
-                        if (
-                            basePath.isBlank()
-                        ) {
-                            manifestItem.href
-                        } else {
-                            "$basePath/${manifestItem.href}"
-                        }
-
-                    val normalizedPath =
-                        normalizePath(
-                            fullPath
+                        combinePaths(
+                            basePath,
+                            item.href
                         )
 
                     val entry =
                         zip.getEntry(
-                            normalizedPath
+                            fullPath
                         )
                             ?: continue
 
@@ -118,32 +106,39 @@ object EpubReader {
                         continue
                     }
 
-                    val chapterTitle =
+                    val title =
                         extractChapterTitle(
                             content
-                        )
-                            .ifBlank {
-                                manifestItem.title
-                                    ?: "Chapter ${chapters.size + 1}"
-                            }
+                        ).ifBlank {
+                            item.title
+                                ?: "Chapter ${
+                                    chapters.size + 1
+                                }"
+                        }
 
                     chapters.add(
                         EpubChapter(
-                            title =
-                                chapterTitle,
-
-                            content =
-                                content
+                            title = title,
+                            content = content
                         )
                     )
                 }
 
-                if (chapters.isEmpty()) {
+                if (
+                    chapters.isEmpty()
+                ) {
 
                     throw IllegalArgumentException(
                         "No readable chapters were found in this EPUB."
                     )
                 }
+
+                val images =
+                    extractImages(
+                        zip = zip,
+                        basePath = basePath,
+                        manifest = opf.manifest
+                    )
 
                 return EpubDocument(
                     title =
@@ -157,13 +152,143 @@ object EpubReader {
                         opf.author,
 
                     chapters =
-                        chapters
+                        chapters,
+
+                    images =
+                        images
                 )
             }
 
         } finally {
 
             temporaryFile.delete()
+        }
+    }
+
+    private fun extractImages(
+        zip: ZipFile,
+        basePath: String,
+        manifest: Map<String, ManifestItem>
+    ): List<EpubImage> {
+
+        val images =
+            mutableListOf<EpubImage>()
+
+        for (
+            item in manifest.values
+        ) {
+
+            val path =
+                combinePaths(
+                    basePath,
+                    item.href
+                )
+
+            val extension =
+                path
+                    .substringAfterLast(
+                        '.',
+                        ""
+                    )
+                    .lowercase()
+
+            val mimeType =
+                item.mediaType
+                    ?: imageMimeType(
+                        extension
+                    )
+
+            val isImage =
+                mimeType
+                    ?.lowercase()
+                    ?.startsWith(
+                        "image/"
+                    ) == true ||
+                    extension in setOf(
+                        "jpg",
+                        "jpeg",
+                        "png",
+                        "gif",
+                        "webp",
+                        "bmp",
+                        "svg",
+                        "avif"
+                    )
+
+            if (
+                !isImage
+            ) {
+                continue
+            }
+
+            val entry =
+                zip.getEntry(path)
+                    ?: continue
+
+            try {
+
+                val data =
+                    zip.getInputStream(
+                        entry
+                    ).use {
+                        it.readBytes()
+                    }
+
+                if (
+                    data.isNotEmpty()
+                ) {
+
+                    images.add(
+                        EpubImage(
+                            path = path,
+                            mimeType = mimeType,
+                            data = data
+                        )
+                    )
+                }
+
+            } catch (
+                exception: Exception
+            ) {
+
+                // Ignore a damaged image and
+                // continue loading the EPUB.
+            }
+        }
+
+        return images
+    }
+
+    private fun imageMimeType(
+        extension: String
+    ): String? {
+
+        return when (extension) {
+
+            "jpg",
+            "jpeg" ->
+                "image/jpeg"
+
+            "png" ->
+                "image/png"
+
+            "gif" ->
+                "image/gif"
+
+            "webp" ->
+                "image/webp"
+
+            "bmp" ->
+                "image/bmp"
+
+            "svg" ->
+                "image/svg+xml"
+
+            "avif" ->
+                "image/avif"
+
+            else ->
+                null
         }
     }
 
@@ -199,7 +324,7 @@ object EpubReader {
     ): String {
 
         val parser =
-            android.util.Xml.newPullParser()
+            Xml.newPullParser()
 
         parser.setInput(
             input,
@@ -215,7 +340,7 @@ object EpubReader {
 
             if (
                 event ==
-                XmlPullParser.START_TAG &&
+                    XmlPullParser.START_TAG &&
                 parser.name.equals(
                     "rootfile",
                     ignoreCase = true
@@ -249,7 +374,7 @@ object EpubReader {
     ): EpubPackage {
 
         val parser =
-            android.util.Xml.newPullParser()
+            Xml.newPullParser()
 
         parser.setInput(
             input,
@@ -274,14 +399,15 @@ object EpubReader {
 
             if (
                 event ==
-                XmlPullParser.START_TAG
+                    XmlPullParser.START_TAG
             ) {
 
                 when (
-                    parser.name.lowercase()
+                    parser.name
+                        .substringAfterLast(':')
+                        .lowercase()
                 ) {
 
-                    "dc:title",
                     "title" -> {
 
                         if (
@@ -295,7 +421,6 @@ object EpubReader {
                         }
                     }
 
-                    "dc:creator",
                     "creator" -> {
 
                         if (
@@ -329,6 +454,12 @@ object EpubReader {
                                 "title"
                             )
 
+                        val mediaType =
+                            parser.getAttributeValue(
+                                null,
+                                "media-type"
+                            )
+
                         if (
                             !id.isNullOrBlank() &&
                             !href.isNullOrBlank()
@@ -342,7 +473,9 @@ object EpubReader {
                                             href
                                         ),
                                     title =
-                                        itemTitle
+                                        itemTitle,
+                                    mediaType =
+                                        mediaType
                                 )
                         }
                     }
@@ -386,7 +519,7 @@ object EpubReader {
         val builder =
             StringBuilder()
 
-        val startDepth =
+        val depth =
             parser.depth
 
         var event =
@@ -398,15 +531,17 @@ object EpubReader {
 
             if (
                 event ==
-                XmlPullParser.END_TAG &&
-                parser.depth < startDepth
+                    XmlPullParser.END_TAG &&
+                parser.depth < depth
             ) {
                 break
             }
 
             if (
-                event == XmlPullParser.TEXT ||
-                event == XmlPullParser.CDSECT
+                event ==
+                    XmlPullParser.TEXT ||
+                event ==
+                    XmlPullParser.CDSECT
             ) {
 
                 builder.append(
@@ -430,13 +565,13 @@ object EpubReader {
         val bytes =
             input.readBytes()
 
-        val decoded =
+        val html =
             decodeHtml(
                 bytes
             )
 
         return convertHtmlToText(
-            decoded
+            html
         )
     }
 
@@ -445,24 +580,18 @@ object EpubReader {
     ): String {
 
         val utf8 =
-            try {
-                String(
-                    bytes,
-                    Charsets.UTF_8
-                )
-            } catch (
-                exception: Exception
-            ) {
-                ""
+            String(
+                bytes,
+                Charsets.UTF_8
+            )
+
+        val replacementCount =
+            utf8.count {
+                it == '\uFFFD'
             }
 
         if (
-            utf8.contains(
-                '<'
-            ) &&
-            utf8.count {
-                it == '\uFFFD'
-            } < 10
+            replacementCount < 10
         ) {
             return utf8
         }
@@ -591,9 +720,7 @@ object EpubReader {
                     .toIntOrNull()
                     ?.let {
                         String(
-                            Character.toChars(
-                                it
-                            )
+                            Character.toChars(it)
                         )
                     }
                     ?: match.value
@@ -618,20 +745,22 @@ object EpubReader {
                     it.isNotBlank()
                 }
 
-        if (lines.isEmpty()) {
+        if (
+            lines.isEmpty()
+        ) {
             return ""
         }
 
         val first =
             lines.first()
 
-        if (
+        return if (
             first.length <= 120
         ) {
-            return first
+            first
+        } else {
+            ""
         }
-
-        return ""
     }
 
     private fun decodeHref(
@@ -640,7 +769,7 @@ object EpubReader {
 
         return try {
 
-            java.net.URLDecoder.decode(
+            URLDecoder.decode(
                 href,
                 "UTF-8"
             )
@@ -653,24 +782,37 @@ object EpubReader {
         }
     }
 
+    private fun combinePaths(
+        base: String,
+        child: String
+    ): String {
+
+        return normalizePath(
+            if (
+                base.isBlank()
+            ) {
+                child
+            } else {
+                "$base/$child"
+            }
+        )
+    }
+
     private fun normalizePath(
         path: String
     ): String {
-
-        val parts =
-            path.split('/')
 
         val result =
             mutableListOf<String>()
 
         for (
-            part in parts
+            part in path.split('/')
         ) {
 
             when {
 
                 part.isBlank() ||
-                part == "." -> {
+                    part == "." -> {
                     continue
                 }
 
@@ -691,9 +833,7 @@ object EpubReader {
             }
         }
 
-        return result.joinToString(
-            "/"
-        )
+        return result.joinToString("/")
     }
 
     private fun cleanText(
@@ -714,15 +854,11 @@ object EpubReader {
                 '\n'
             )
             .replace(
-                Regex(
-                    "[ \\t]+"
-                ),
+                Regex("[ \\t]+"),
                 " "
             )
             .replace(
-                Regex(
-                    "\n{3,}"
-                ),
+                Regex("\n{3,}"),
                 "\n\n"
             )
             .trim()
@@ -786,6 +922,7 @@ object EpubReader {
     private data class ManifestItem(
         val id: String,
         val href: String,
-        val title: String?
+        val title: String?,
+        val mediaType: String?
     )
 }
