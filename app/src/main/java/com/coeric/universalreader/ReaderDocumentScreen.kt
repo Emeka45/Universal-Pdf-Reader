@@ -265,7 +265,7 @@ private fun DocumentContent(
                     modifier =
                         Modifier.padding(
                             top = 10.dp,
-                            bottom = 10.dp
+                           bottom = 10.dp
                         )
                 )
             }
