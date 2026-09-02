@@ -1,194 +1,184 @@
 package com.coeric.universalreader
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
+import android.os.ParcelFileDescriptor
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.TextIncrease
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-class ReaderActivity : ComponentActivity() {
+data class PdfPage(
+    val number: Int,
+    val bitmap: Bitmap
+)
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+@Composable
+fun PdfReaderView(
+    context: Context,
+    uri: Uri,
+    modifier: Modifier = Modifier
+) {
 
-        val documentUri = intent.getStringExtra("document_uri")
+    val pages by produceState<List<PdfPage>>(
+        initialValue = emptyList(),
+        key1 = uri
+    ) {
 
-        setContent {
-            MaterialTheme {
+        value = withContext(Dispatchers.IO) {
 
-                if (documentUri != null) {
+            val result = mutableListOf<PdfPage>()
 
-                    ReaderScreen(
-                        uri = Uri.parse(documentUri),
-                        onBack = {
-                            finish()
-                        }
-                    )
+            var descriptor: ParcelFileDescriptor? = null
+            var renderer: PdfRenderer? = null
 
-                } else {
+            try {
 
-                    Text(
-                        text = "No document selected.",
-                        modifier = Modifier.padding(20.dp)
-                    )
+                descriptor = context.contentResolver
+                    .openFileDescriptor(uri, "r")
+
+                if (descriptor != null) {
+
+                    renderer = PdfRenderer(descriptor)
+
+                    for (pageIndex in 0 until renderer.pageCount) {
+
+                        val page = renderer.openPage(pageIndex)
+
+                        val width = page.width * 2
+                        val height = page.height * 2
+
+                        val bitmap = Bitmap.createBitmap(
+                            width,
+                            height,
+                            Bitmap.Config.ARGB_8888
+                        )
+
+                        bitmap.eraseColor(Color.WHITE)
+
+                        page.render(
+                            bitmap,
+                            null,
+                            null,
+                            PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
+                        )
+
+                        page.close()
+
+                        result.add(
+                            PdfPage(
+                                number = pageIndex + 1,
+                                bitmap = bitmap
+                            )
+                        )
+                    }
                 }
+
+            } catch (_: Exception) {
+
+            } finally {
+
+                renderer?.close()
+                descriptor?.close()
+            }
+
+            result
+        }
+    }
+
+    if (pages.isEmpty()) {
+
+        Box(
+            modifier = modifier,
+            contentAlignment = Alignment.Center
+        ) {
+
+            CircularProgressIndicator()
+        }
+
+    } else {
+
+        LazyColumn(
+            modifier = modifier
+        ) {
+
+            items(
+                items = pages,
+                key = { it.number }
+            ) { page ->
+
+                PdfPageView(page)
             }
         }
     }
 }
 
 @Composable
-fun ReaderScreen(
-    uri: Uri,
-    onBack: () -> Unit
+private fun PdfPageView(
+    page: PdfPage
 ) {
 
-    val context = LocalContext.current
-
-    var fontSize by remember {
-        mutableFloatStateOf(18f)
+    var scale by remember {
+        mutableFloatStateOf(1f)
     }
 
-    var showFontControls by remember {
-        mutableStateOf(false)
-    }
-
-    val documentText = produceState(
-        initialValue = "Loading document...",
-        key1 = uri
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp)
     ) {
 
-        value = try {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(Unit) {
 
-            context.contentResolver
-                .openInputStream(uri)
-                ?.bufferedReader()
-                ?.use { reader ->
-                    reader.readText()
-                }
-                ?: "Unable to open this document."
+                    detectTransformGestures { _, _, zoom, _ ->
 
-        } catch (exception: Exception) {
-
-            "Unable to read this document.\n\n${exception.message}"
-        }
-    }
-
-    Scaffold(
-
-        topBar = {
-
-            TopAppBar(
-
-                title = {
-                    Text("Reader")
-                },
-
-                navigationIcon = {
-
-                    IconButton(
-                        onClick = onBack
-                    ) {
-
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-
-                actions = {
-
-                    IconButton(
-                        onClick = {
-                            showFontControls = !showFontControls
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector = Icons.Default.TextIncrease,
-                            contentDescription = "Font size"
-                        )
+                        scale = (scale * zoom)
+                            .coerceIn(1f, 4f)
                     }
                 }
+        ) {
+
+            Image(
+                bitmap = page.bitmap.asImageBitmap(),
+                contentDescription = "PDF page ${page.number}",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .scale(scale)
             )
         }
 
-    ) { paddingValues ->
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-
-            if (showFontControls) {
-
-                Column(
-                    modifier = Modifier.padding(
-                        horizontal = 20.dp,
-                        vertical = 8.dp
-                    )
-                ) {
-
-                    Text(
-                        text = "Text Size",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-
-                    Slider(
-                        value = fontSize,
-                        onValueChange = {
-                            fontSize = it
-                        },
-                        valueRange = 12f..32f
-                    )
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(
-                        rememberScrollState()
-                    )
-                    .padding(20.dp)
-            ) {
-
-                Text(
-                    text = documentText.value,
-                    style = TextStyle(
-                        fontSize = fontSize.sp,
-                        lineHeight = (fontSize * 1.55f).sp
-                    )
-                )
-            }
-        }
+        Text(
+            text = "Page ${page.number}",
+            modifier = Modifier.padding(
+                horizontal = 16.dp,
+                vertical = 6.dp
+            )
+        )
     }
 }
