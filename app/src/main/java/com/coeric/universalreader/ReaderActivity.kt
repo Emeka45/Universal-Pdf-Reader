@@ -1,1091 +1,363 @@
-@file:OptIn(
-    androidx.compose.material3.ExperimentalMaterial3Api::class
-)
-
 package com.coeric.universalreader
 
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.TextIncrease
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.Divider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 class ReaderActivity : ComponentActivity() {
 
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
+        super.onCreate(savedInstanceState)
 
-        super.onCreate(
-            savedInstanceState
-        )
+        val uriString =
+            intent.getStringExtra("uri")
 
-        val documentUri =
-            intent.getStringExtra(
-                "document_uri"
-            )
+        if (uriString.isNullOrBlank()) {
+            finish()
+            return
+        }
+
+        val uri =
+            Uri.parse(uriString)
 
         setContent {
-
-            MaterialTheme {
-
-                if (
-                    documentUri != null
-                ) {
-
-                    ReaderScreen(
-                        uri =
-                            Uri.parse(
-                                documentUri
-                            ),
-                        onBack = {
-                            finish()
-                        }
-                    )
-
-                } else {
-
-                    Scaffold(
-
-                        topBar = {
-
-                            TopAppBar(
-
-                                title = {
-                                    Text(
-                                        "Universal Reader"
-                                    )
-                                },
-
-                                navigationIcon = {
-
-                                    IconButton(
-                                        onClick = {
-                                            finish()
-                                        }
-                                    ) {
-
-                                        Icon(
-                                            imageVector =
-                                                Icons.Default.ArrowBack,
-                                            contentDescription =
-                                                "Back"
-                                        )
-                                    }
-                                }
-                            )
-                        }
-
-                    ) { paddingValues ->
-
-                        Text(
-                            text =
-                                "No document selected.",
-                            modifier =
-                                Modifier
-                                    .padding(
-                                        paddingValues
-                                    )
-                                    .padding(
-                                        20.dp
-                                    )
-                        )
-                    }
-                }
-            }
+            ReaderContent(uri)
         }
     }
 }
 
 @Composable
-fun ReaderScreen(
-    uri: Uri,
-    onBack: () -> Unit
+private fun ReaderContent(
+    uri: Uri
 ) {
-
     val context =
-        LocalContext.current
+        androidx.compose.ui.platform.LocalContext.current
 
-    val format =
-        remember(uri) {
+    var format by remember {
+        mutableStateOf<DocumentFormat?>(null)
+    }
 
-            DocumentFormatDetector.detect(
-                context,
-                uri
+    var error by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    LaunchedEffect(uri) {
+        try {
+            format =
+                DocumentFormatDetector.detect(
+                    context,
+                    uri
+                )
+        } catch (exception: Exception) {
+            error =
+                exception.message
+                    ?: "Unable to detect document format."
+        }
+    }
+
+    when {
+        error != null -> {
+            ErrorScreen(
+                message =
+                    error
+                        ?: "Unable to open document."
             )
         }
 
+        format == null -> {
+            LoadingScreen()
+        }
+
+        format == DocumentFormat.CBZ -> {
+            CbzReaderContent(uri)
+        }
+
+        format == DocumentFormat.CBR -> {
+            ErrorScreen(
+                message =
+                    "CBR support is not enabled yet."
+            )
+        }
+
+        else -> {
+            ExistingFormatContent(
+                uri = uri,
+                format = format!!
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExistingFormatContent(
+    uri: Uri,
+    format: DocumentFormat
+) {
     when (format) {
 
         DocumentFormat.PDF -> {
-
-            Scaffold(
-
-                topBar = {
-
-                    TopAppBar(
-
-                        title = {
-                            Text(
-                                "PDF Reader"
-                            )
-                        },
-
-                        navigationIcon = {
-
-                            IconButton(
-                                onClick =
-                                    onBack
-                            ) {
-
-                                Icon(
-                                    imageVector =
-                                        Icons.Default.ArrowBack,
-                                    contentDescription =
-                                        "Back"
-                                )
-                            }
-                        }
-                    )
-                }
-
-            ) { paddingValues ->
-
-                PdfReaderView(
-                    context =
-                        context,
-                    uri =
-                        uri,
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .padding(
-                                paddingValues
-                            )
-                )
-            }
+            PdfReaderView(
+                uri = uri
+            )
         }
 
         DocumentFormat.EPUB -> {
-
             EpubReaderScreen(
-                context =
-                    context,
-                uri =
-                    uri,
-                onBack =
-                    onBack
+                uri = uri
             )
         }
 
         DocumentFormat.MOBI,
         DocumentFormat.AZW,
         DocumentFormat.AZW3 -> {
-
             MobiReaderScreen(
-                uri =
-                    uri,
-                format =
-                    format,
-                onBack =
-                    onBack
+                uri = uri
+            )
+        }
+
+        DocumentFormat.FB2 -> {
+            Fb2ReaderContent(
+                uri = uri
             )
         }
 
         else -> {
-
             TextReaderScreen(
-                uri =
-                    uri,
-                onBack =
-                    onBack
+                uri = uri
             )
         }
     }
 }
 
 @Composable
-private fun EpubReaderScreen(
-    context: android.content.Context,
-    uri: Uri,
-    onBack: () -> Unit
+private fun CbzReaderContent(
+    uri: Uri
 ) {
+    val context =
+        androidx.compose.ui.platform.LocalContext.current
 
-    val epubState =
-        produceState<Result<EpubDocument>?>(null, uri) {
+    var pages by remember {
+        mutableStateOf<List<ComicPage>?>(null)
+    }
 
-            value =
-                runCatching {
+    var error by remember {
+        mutableStateOf<String?>(null)
+    }
 
-                    withContext(
-                        Dispatchers.IO
-                    ) {
-
-                        EpubReader.open(
-                            context,
-                            uri
-                        )
-                    }
-                }
-        }
-
-    val result =
-        epubState.value
-
-    if (result == null) {
-
-        Scaffold(
-
-            topBar = {
-
-                TopAppBar(
-
-                    title = {
-                        Text(
-                            "EPUB Reader"
-                        )
-                    },
-
-                    navigationIcon = {
-
-                        IconButton(
-                            onClick =
-                                onBack
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.Default.ArrowBack,
-                                contentDescription =
-                                    "Back"
-                            )
-                        }
-                    }
+    LaunchedEffect(uri) {
+        try {
+            pages =
+                CbzReader.open(
+                    context,
+                    uri
                 )
-            }
+        } catch (exception: Exception) {
+            error =
+                exception.message
+                    ?: "Unable to open CBZ file."
+        }
+    }
 
-        ) { paddingValues ->
-
-            Text(
-                text =
-                    "Loading EPUB...",
-                modifier =
-                    Modifier
-                        .padding(
-                            paddingValues
-                        )
-                        .padding(
-                            20.dp
-                        )
+    when {
+        error != null -> {
+            ErrorScreen(
+                message =
+                    error
+                        ?: "Unable to open CBZ."
             )
         }
 
-        return
-    }
-
-    val document =
-        result.getOrNull()
-
-    if (document == null) {
-
-        val message =
-            result
-                .exceptionOrNull()
-                ?.message
-                ?: "Unable to read this EPUB."
-
-        Scaffold(
-
-            topBar = {
-
-                TopAppBar(
-
-                    title = {
-                        Text(
-                            "EPUB Reader"
-                        )
-                    },
-
-                    navigationIcon = {
-
-                        IconButton(
-                            onClick =
-                                onBack
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.Default.ArrowBack,
-                                contentDescription =
-                                    "Back"
-                            )
-                        }
-                    }
-                )
-            }
-
-        ) { paddingValues ->
-
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(
-                            paddingValues
-                        )
-                        .padding(
-                            20.dp
-                        )
-            ) {
-
-                Text(
-                    text =
-                        "Unable to open EPUB",
-                    style =
-                        MaterialTheme
-                            .typography
-                            .headlineSmall
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            12.dp
-                        )
-                )
-
-                Text(
-                    text =
-                        message
-                )
-            }
+        pages == null -> {
+            LoadingScreen()
         }
 
-        return
-    }
-
-    var currentChapter by remember(uri) {
-
-        mutableIntStateOf(
-
-            context
-                .getSharedPreferences(
-                    "reader_progress",
-                    android.content.Context.MODE_PRIVATE
-                )
-                .getInt(
-                    "epub_$uri",
-                    0
-                )
-                .coerceIn(
-                    0,
-                    document.chapters.lastIndex
-                )
-        )
-    }
-
-    var showTableOfContents by remember {
-        mutableStateOf(false)
-    }
-
-    var settings by remember {
-
-        mutableStateOf(
-            ReaderSettingsRepository.load(
-                context
+        else -> {
+            ComicReaderScreen(
+                pages = pages!!
             )
-        )
-    }
-
-    var showSettings by remember {
-        mutableStateOf(false)
-    }
-
-    val preferences =
-        remember(uri) {
-
-            context.getSharedPreferences(
-                "reader_progress",
-                android.content.Context.MODE_PRIVATE
-            )
-        }
-
-    val chapter =
-        document.chapters[currentChapter]
-
-    Scaffold(
-
-        topBar = {
-
-            TopAppBar(
-
-                title = {
-
-                    Text(
-                        document.title
-                    )
-                },
-
-                navigationIcon = {
-
-                    IconButton(
-                        onClick =
-                            onBack
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.ArrowBack,
-                            contentDescription =
-                                "Back"
-                        )
-                    }
-                },
-
-                actions = {
-
-                    IconButton(
-                        onClick = {
-
-                            showTableOfContents =
-                                !showTableOfContents
-
-                            if (
-                                showTableOfContents
-                            ) {
-                                showSettings =
-                                    false
-                            }
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.MenuBook,
-                            contentDescription =
-                                "Table of contents"
-                        )
-                    }
-
-                    IconButton(
-                        onClick = {
-
-                            showSettings =
-                                !showSettings
-
-                            if (
-                                showSettings
-                            ) {
-                                showTableOfContents =
-                                    false
-                            }
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.TextIncrease,
-                            contentDescription =
-                                "Reader settings"
-                        )
-                    }
-                }
-            )
-        }
-
-    ) { paddingValues ->
-
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(
-                        paddingValues
-                    )
-        ) {
-
-            if (showSettings) {
-
-                ReaderSettingsPanel(
-
-                    settings =
-                        settings,
-
-                    onSettingsChanged = { newSettings ->
-
-                        settings =
-                            newSettings
-
-                        ReaderSettingsRepository
-                            .save(
-                                context,
-                                newSettings
-                            )
-                    }
-                )
-            }
-
-            if (showTableOfContents) {
-
-                TableOfContents(
-
-                    document =
-                        document,
-
-                    currentChapter =
-                        currentChapter,
-
-                    onChapterSelected = { index ->
-
-                        currentChapter =
-                            index
-
-                        preferences
-                            .edit()
-                            .putInt(
-                                "epub_$uri",
-                                index
-                            )
-                            .apply()
-
-                        showTableOfContents =
-                            false
-                    }
-                )
-
-            } else {
-
-                ChapterContent(
-
-                    document =
-                        document,
-
-                    chapter =
-                        chapter,
-
-                    chapterIndex =
-                        currentChapter,
-
-                    settings =
-                        settings,
-
-                    onPrevious = {
-
-                        if (
-                            currentChapter > 0
-                        ) {
-
-                            currentChapter--
-
-                            preferences
-                                .edit()
-                                .putInt(
-                                    "epub_$uri",
-                                    currentChapter
-                                )
-                                .apply()
-                        }
-                    },
-
-                    onNext = {
-
-                        if (
-                            currentChapter <
-                            document.chapters.lastIndex
-                        ) {
-
-                            currentChapter++
-
-                            preferences
-                                .edit()
-                                .putInt(
-                                    "epub_$uri",
-                                    currentChapter
-                                )
-                                .apply()
-                        }
-                    }
-                )
-            }
         }
     }
 }
 
 @Composable
-private fun TableOfContents(
-    document: EpubDocument,
-    currentChapter: Int,
-    onChapterSelected: (Int) -> Unit
+private fun Fb2ReaderContent(
+    uri: Uri
 ) {
+    val context =
+        androidx.compose.ui.platform.LocalContext.current
 
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(
-                    rememberScrollState()
+    var document by remember {
+        mutableStateOf<ReaderDocument?>(null)
+    }
+
+    var error by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    LaunchedEffect(uri) {
+        try {
+            document =
+                Fb2Reader.open(
+                    context,
+                    uri
                 )
-                .padding(
-                    20.dp
-                )
-    ) {
+        } catch (exception: Exception) {
+            error =
+                exception.message
+                    ?: "Unable to open FB2 file."
+        }
+    }
 
-        Text(
-            text =
-                "Table of Contents",
-            style =
-                MaterialTheme
-                    .typography
-                    .headlineSmall
-        )
+    when {
+        error != null -> {
+            ErrorScreen(
+                message =
+                    error
+                        ?: "Unable to open FB2."
+            )
+        }
 
-        Spacer(
-            modifier =
-                Modifier.height(
-                    12.dp
-                )
-        )
+        document == null -> {
+            LoadingScreen()
+        }
 
-        for (
-            index in document.chapters.indices
-        ) {
-
-            Card(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            vertical = 4.dp
-                        ),
-                onClick = {
-
-                    onChapterSelected(
-                        index
-                    )
-                }
-            ) {
-
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                16.dp
-                            ),
-                    horizontalArrangement =
-                        Arrangement.SpaceBetween
-                ) {
-
-                    Text(
-                        text =
-                            "${index + 1}. ${document.chapters[index].title}",
-                        style =
-                            if (
-                                index ==
-                                currentChapter
-                            ) {
-                                MaterialTheme
-                                    .typography
-                                    .titleMedium
-                            } else {
-                                MaterialTheme
-                                    .typography
-                                    .bodyLarge
-                            }
-                    )
-                }
-            }
+        else -> {
+            ReaderDocumentScreen(
+                document = document!!
+            )
         }
     }
 }
 
 @Composable
-private fun ChapterContent(
-    document: EpubDocument,
-    chapter: EpubChapter,
-    chapterIndex: Int,
-    settings: ReaderSettings,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit
+private fun ReaderDocumentScreen(
+    document: ReaderDocument
 ) {
-
-    val textAlignment =
-        if (
-            settings.textAlignment ==
-            ReaderTextAlignment.JUSTIFY
-        ) {
-            TextAlign.Justify
-        } else {
-            TextAlign.Left
-        }
-
-    Column(
+    androidx.compose.foundation.lazy.LazyColumn(
         modifier =
             Modifier.fillMaxSize()
     ) {
-
-        Column(
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .verticalScroll(
-                        rememberScrollState()
-                    )
-                    .padding(
-                        20.dp
-                    )
-        ) {
-
+        item {
             Text(
                 text =
                     document.title,
+
                 style =
-                    MaterialTheme
+                    androidx.compose.material3.MaterialTheme
                         .typography
-                        .titleMedium
+                        .headlineMedium,
+
+                modifier =
+                    Modifier.padding(
+                        20.dp
+                    )
             )
 
             document.author?.let {
-
                 Text(
-                    text =
-                        "By $it",
+                    text = it,
+
                     style =
-                        MaterialTheme
+                        androidx.compose.material3.MaterialTheme
                             .typography
-                            .bodyMedium,
+                            .bodyLarge,
+
                     modifier =
                         Modifier.padding(
-                            top = 4.dp,
-                            bottom = 20.dp
+                            horizontal = 20.dp
                         )
                 )
             }
+        }
+
+        items(
+            document.chapters.size
+        ) { index ->
+
+            val chapter =
+                document.chapters[index]
 
             Text(
                 text =
                     chapter.title,
+
                 style =
-                    MaterialTheme
+                    androidx.compose.material3.MaterialTheme
                         .typography
-                        .headlineMedium,
+                        .titleLarge,
+
                 modifier =
                     Modifier.padding(
-                        bottom = 16.dp
+                        horizontal = 20.dp,
+                        vertical = 12.dp
                     )
             )
 
             Text(
                 text =
                     chapter.content,
-                fontSize =
-                    settings.fontSize.sp,
-                lineHeight =
-                    (
-                        settings.fontSize *
-                            settings.lineSpacing
-                        ).sp,
-                textAlign =
-                    textAlignment
-            )
 
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        24.dp
-                    )
-            )
-        }
+                style =
+                    androidx.compose.material3.MaterialTheme
+                        .typography
+                        .bodyLarge,
 
-        Divider()
-
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        12.dp
-                    ),
-            horizontalArrangement =
-                Arrangement.SpaceBetween
-        ) {
-
-            Button(
-                enabled =
-                    chapterIndex > 0,
-                onClick =
-                    onPrevious
-            ) {
-
-                Icon(
-                    imageVector =
-                        Icons.Default.ArrowBack,
-                    contentDescription =
-                        "Previous chapter"
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.padding(
-                            horizontal = 4.dp
-                        )
-                )
-
-                Text(
-                    "Previous"
-                )
-            }
-
-            Text(
-                text =
-                    "${chapterIndex + 1} / ${document.chapters.size}",
                 modifier =
                     Modifier.padding(
-                        top = 12.dp
+                        horizontal = 20.dp,
+                        vertical = 8.dp
                     )
             )
-
-            Button(
-                enabled =
-                    chapterIndex <
-                    document.chapters.lastIndex,
-                onClick =
-                    onNext
-            ) {
-
-                Text(
-                    "Next"
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.padding(
-                            horizontal = 4.dp
-                        )
-                )
-
-                Icon(
-                    imageVector =
-                        Icons.Default.ArrowForward,
-                    contentDescription =
-                        "Next chapter"
-                )
-            }
         }
     }
 }
 
 @Composable
-private fun TextReaderScreen(
-    uri: Uri,
-    onBack: () -> Unit
+private fun LoadingScreen() {
+    Box(
+        modifier =
+            Modifier.fillMaxSize(),
+
+        contentAlignment =
+            Alignment.Center
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun ErrorScreen(
+    message: String
 ) {
+    Box(
+        modifier =
+            Modifier.fillMaxSize(),
 
-    val context =
-        LocalContext.current
+        contentAlignment =
+            Alignment.Center
+    ) {
+        Text(
+            text = message,
 
-    var settings by remember {
-
-        mutableStateOf(
-            ReaderSettingsRepository.load(
-                context
-            )
-        )
-    }
-
-    var showSettings by remember {
-        mutableStateOf(false)
-    }
-
-    val documentText =
-        produceState(
-            initialValue =
-                "Loading document...",
-            key1 =
-                uri
-        ) {
-
-            value = try {
-
-                withContext(
-                    Dispatchers.IO
-                ) {
-
-                    context.contentResolver
-                        .openInputStream(
-                            uri
-                        )
-                        ?.bufferedReader()
-                        ?.use {
-                            it.readText()
-                        }
-                        ?: "Unable to open this document."
-                }
-
-            } catch (
-                exception: Exception
-            ) {
-
-                "Unable to read this document.\n\n${exception.message}"
-            }
-        }
-
-    val textAlignment =
-        if (
-            settings.textAlignment ==
-            ReaderTextAlignment.JUSTIFY
-        ) {
-            TextAlign.Justify
-        } else {
-            TextAlign.Left
-        }
-
-    Scaffold(
-
-        topBar = {
-
-            TopAppBar(
-
-                title = {
-                    Text(
-                        "Reader"
-                    )
-                },
-
-                navigationIcon = {
-
-                    IconButton(
-                        onClick =
-                            onBack
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.ArrowBack,
-                            contentDescription =
-                                "Back"
-                        )
-                    }
-                },
-
-                actions = {
-
-                    IconButton(
-                        onClick = {
-
-                            showSettings =
-                                !showSettings
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.TextIncrease,
-                            contentDescription =
-                                "Reader settings"
-                        )
-                    }
-                }
-            )
-        }
-
-    ) { paddingValues ->
-
-        Column(
             modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(
-                        paddingValues
-                    )
-        ) {
-
-            if (showSettings) {
-
-                ReaderSettingsPanel(
-
-                    settings =
-                        settings,
-
-                    onSettingsChanged = { newSettings ->
-
-                        settings =
-                            newSettings
-
-                        ReaderSettingsRepository
-                            .save(
-                                context,
-                                newSettings
-                            )
-                    }
+                Modifier.padding(
+                    24.dp
                 )
-            }
-
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(
-                            rememberScrollState()
-                        )
-                        .padding(
-                            20.dp
-                        )
-            ) {
-
-                Text(
-                    text =
-                        documentText.value,
-                    fontSize =
-                        settings.fontSize.sp,
-                    lineHeight =
-                        (
-                            settings.fontSize *
-                                settings.lineSpacing
-                            ).sp,
-                    textAlign =
-                        textAlignment
-                )
-            }
-        }
+        )
     }
 }
