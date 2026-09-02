@@ -2,251 +2,162 @@ package com.coeric.universalreader
 
 import android.content.Context
 import android.net.Uri
-import org.w3c.dom.Element
-import java.io.File
+import org.xmlpull.v1.XmlPullParser
 import java.io.InputStream
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
 import java.util.zip.ZipFile
-import javax.xml.parsers.DocumentBuilderFactory
+import java.io.File
+import java.nio.charset.Charset
 
 object EpubReader {
 
-    fun open(
+    suspend fun open(
         context: Context,
         uri: Uri
     ): EpubDocument {
 
-        val temporaryFile = File.createTempFile(
-            "universal_reader_",
-            ".epub",
-            context.cacheDir
-        )
+        val temporaryFile =
+            File.createTempFile(
+                "universal_reader_",
+                ".epub",
+                context.cacheDir
+            )
 
         try {
 
-            context.contentResolver
-                .openInputStream(uri)
-                ?.use { input ->
+            copyUriToFile(
+                context,
+                uri,
+                temporaryFile
+            )
 
-                    temporaryFile
-                        .outputStream()
-                        .use { output ->
-                            input.copyTo(output)
-                        }
-                }
-                ?: throw IllegalStateException(
-                    "Unable to open EPUB file."
-                )
-
-            ZipFile(temporaryFile).use { zip ->
+            ZipFile(
+                temporaryFile
+            ).use { zip ->
 
                 val containerEntry =
                     zip.getEntry(
                         "META-INF/container.xml"
                     )
-                        ?: throw IllegalStateException(
+                        ?: throw IllegalArgumentException(
                             "Invalid EPUB: container.xml not found."
                         )
 
-                val containerDocument =
-                    parseXml(
-                        zip.getInputStream(
-                            containerEntry
-                        )
-                    )
+                val rootFile =
+                    zip.getInputStream(
+                        containerEntry
+                    ).use {
+                        findRootFile(it)
+                    }
 
-                val rootfile =
-                    containerDocument
-                        .getElementsByTagNameNS(
-                            "*",
-                            "rootfile"
-                        )
-                        .item(0) as? Element
-                        ?: throw IllegalStateException(
+                val opfEntry =
+                    zip.getEntry(rootFile)
+                        ?: throw IllegalArgumentException(
                             "Invalid EPUB: package file not found."
                         )
 
-                val packagePath =
-                    normalizePath(
-                        rootfile.getAttribute(
-                            "full-path"
-                        )
-                    )
-
-                val packageEntry =
-                    findZipEntry(
-                        zip,
-                        packagePath
-                    )
-                        ?: throw IllegalStateException(
-                            "EPUB package file not found: $packagePath"
-                        )
-
-                val packageDocument =
-                    parseXml(
-                        zip.getInputStream(
-                            packageEntry
-                        )
-                    )
-
-                val title =
-                    findMetadata(
-                        packageDocument,
-                        "title"
-                    )
-                        ?.takeIf {
-                            it.isNotBlank()
-                        }
-                        ?: "Untitled"
-
-                val author =
-                    findMetadata(
-                        packageDocument,
-                        "creator"
-                    )
-                        ?.takeIf {
-                            it.isNotBlank()
-                        }
-
-                val manifest =
-                    packageDocument
-                        .getElementsByTagNameNS(
-                            "*",
-                            "item"
-                        )
-
-                val spine =
-                    packageDocument
-                        .getElementsByTagNameNS(
-                            "*",
-                            "itemref"
-                        )
-
-                val manifestMap =
-                    mutableMapOf<String, String>()
-
-                val titleMap =
-                    mutableMapOf<String, String>()
-
-                for (i in 0 until manifest.length) {
-
-                    val item =
-                        manifest.item(i) as? Element
-                            ?: continue
-
-                    val id =
-                        item.getAttribute("id")
-
-                    val href =
-                        item.getAttribute("href")
-
-                    if (
-                        id.isNotBlank() &&
-                        href.isNotBlank()
-                    ) {
-
-                        manifestMap[id] = href
-
-                        val itemTitle =
-                            item.getAttribute("title")
-
-                        if (
-                            itemTitle.isNotBlank()
-                        ) {
-                            titleMap[id] =
-                                itemTitle
-                        }
+                val opf =
+                    zip.getInputStream(
+                        opfEntry
+                    ).use {
+                        parseOpf(it)
                     }
-                }
 
-                val packageDirectory =
-                    packagePath
+                val basePath =
+                    rootFile
                         .substringBeforeLast(
-                            "/",
+                            '/',
                             ""
                         )
 
                 val chapters =
                     mutableListOf<EpubChapter>()
 
-                for (i in 0 until spine.length) {
+                for (
+                    item in opf.spine
+                ) {
 
-                    val itemRef =
-                        spine.item(i) as? Element
-                            ?: continue
-
-                    val idref =
-                        itemRef.getAttribute(
-                            "idref"
-                        )
-
-                    val href =
-                        manifestMap[idref]
-                            ?: continue
-
-                    val fullPath =
-                        resolvePath(
-                            packageDirectory,
-                            href
-                        )
-
-                    val chapterEntry =
-                        findZipEntry(
-                            zip,
-                            fullPath
-                        )
-                            ?: continue
-
-                    val html =
-                        zip.getInputStream(
-                            chapterEntry
-                        )
-                            .bufferedReader()
-                            .use {
-                                it.readText()
-                            }
-
-                    val text =
-                        htmlToText(html)
+                    val manifestItem =
+                        opf.manifest[item]
 
                     if (
-                        text.isBlank()
+                        manifestItem == null
+                    ) {
+                        continue
+                    }
+
+                    val fullPath =
+                        if (
+                            basePath.isBlank()
+                        ) {
+                            manifestItem.href
+                        } else {
+                            "$basePath/${manifestItem.href}"
+                        }
+
+                    val normalizedPath =
+                        normalizePath(
+                            fullPath
+                        )
+
+                    val entry =
+                        zip.getEntry(
+                            normalizedPath
+                        )
+                            ?: continue
+
+                    val content =
+                        zip.getInputStream(
+                            entry
+                        ).use {
+                            readHtmlContent(it)
+                        }
+
+                    if (
+                        content.isBlank()
                     ) {
                         continue
                     }
 
                     val chapterTitle =
-                        titleMap[idref]
-                            ?.takeIf {
-                                it.isNotBlank()
+                        extractChapterTitle(
+                            content
+                        )
+                            .ifBlank {
+                                manifestItem.title
+                                    ?: "Chapter ${chapters.size + 1}"
                             }
-                            ?: extractHeading(html)
-                            ?: "Chapter ${chapters.size + 1}"
 
                     chapters.add(
                         EpubChapter(
                             title =
                                 chapterTitle,
+
                             content =
-                                text
+                                content
                         )
                     )
                 }
 
-                if (
-                    chapters.isEmpty()
-                ) {
+                if (chapters.isEmpty()) {
 
-                    throw IllegalStateException(
+                    throw IllegalArgumentException(
                         "No readable chapters were found in this EPUB."
                     )
                 }
 
                 return EpubDocument(
-                    title = title,
-                    author = author,
-                    chapters = chapters
+                    title =
+                        opf.title
+                            ?: getDocumentName(
+                                context,
+                                uri
+                            ),
+
+                    author =
+                        opf.author,
+
+                    chapters =
+                        chapters
                 )
             }
 
@@ -256,64 +167,490 @@ object EpubReader {
         }
     }
 
-    private fun parseXml(
-        inputStream: InputStream
-    ): org.w3c.dom.Document {
+    private fun copyUriToFile(
+        context: Context,
+        uri: Uri,
+        destination: File
+    ) {
 
-        return DocumentBuilderFactory
-            .newInstance()
-            .apply {
-                isNamespaceAware = true
-            }
-            .newDocumentBuilder()
-            .parse(inputStream)
-    }
+        val input =
+            context.contentResolver
+                .openInputStream(uri)
+                ?: throw IllegalArgumentException(
+                    "Unable to open EPUB file."
+                )
 
-    private fun findMetadata(
-        document: org.w3c.dom.Document,
-        localName: String
-    ): String? {
+        input.use { stream ->
 
-        val nodes =
-            document.getElementsByTagNameNS(
-                "*",
-                localName
-            )
+            destination
+                .outputStream()
+                .use { output ->
 
-        for (i in 0 until nodes.length) {
-
-            val value =
-                nodes.item(i)
-                    ?.textContent
-                    ?.trim()
-
-            if (!value.isNullOrBlank()) {
-                return value
-            }
+                    stream.copyTo(
+                        output,
+                        bufferSize = 64 * 1024
+                    )
+                }
         }
-
-        return null
     }
 
-    private fun resolvePath(
-        baseDirectory: String,
-        relativePath: String
+    private fun findRootFile(
+        input: InputStream
     ): String {
 
-        val decoded =
-            URLDecoder.decode(
-                relativePath,
-                StandardCharsets.UTF_8.name()
-            )
+        val parser =
+            android.util.Xml.newPullParser()
 
-        val combined =
-            if (baseDirectory.isBlank()) {
-                decoded
-            } else {
-                "$baseDirectory/$decoded"
+        parser.setInput(
+            input,
+            null
+        )
+
+        var event =
+            parser.eventType
+
+        while (
+            event != XmlPullParser.END_DOCUMENT
+        ) {
+
+            if (
+                event ==
+                XmlPullParser.START_TAG &&
+                parser.name.equals(
+                    "rootfile",
+                    ignoreCase = true
+                )
+            ) {
+
+                val fullPath =
+                    parser.getAttributeValue(
+                        null,
+                        "full-path"
+                    )
+
+                if (
+                    !fullPath.isNullOrBlank()
+                ) {
+                    return fullPath
+                }
             }
 
-        return normalizePath(combined)
+            event =
+                parser.next()
+        }
+
+        throw IllegalArgumentException(
+            "Invalid EPUB: package path not found."
+        )
+    }
+
+    private fun parseOpf(
+        input: InputStream
+    ): EpubPackage {
+
+        val parser =
+            android.util.Xml.newPullParser()
+
+        parser.setInput(
+            input,
+            null
+        )
+
+        var title: String? = null
+        var author: String? = null
+
+        val manifest =
+            linkedMapOf<String, ManifestItem>()
+
+        val spine =
+            mutableListOf<String>()
+
+        var event =
+            parser.eventType
+
+        while (
+            event != XmlPullParser.END_DOCUMENT
+        ) {
+
+            if (
+                event ==
+                XmlPullParser.START_TAG
+            ) {
+
+                when (
+                    parser.name.lowercase()
+                ) {
+
+                    "dc:title",
+                    "title" -> {
+
+                        if (
+                            title.isNullOrBlank()
+                        ) {
+
+                            title =
+                                readText(
+                                    parser
+                                )
+                        }
+                    }
+
+                    "dc:creator",
+                    "creator" -> {
+
+                        if (
+                            author.isNullOrBlank()
+                        ) {
+
+                            author =
+                                readText(
+                                    parser
+                                )
+                        }
+                    }
+
+                    "item" -> {
+
+                        val id =
+                            parser.getAttributeValue(
+                                null,
+                                "id"
+                            )
+
+                        val href =
+                            parser.getAttributeValue(
+                                null,
+                                "href"
+                            )
+
+                        val itemTitle =
+                            parser.getAttributeValue(
+                                null,
+                                "title"
+                            )
+
+                        if (
+                            !id.isNullOrBlank() &&
+                            !href.isNullOrBlank()
+                        ) {
+
+                            manifest[id] =
+                                ManifestItem(
+                                    id = id,
+                                    href =
+                                        decodeHref(
+                                            href
+                                        ),
+                                    title =
+                                        itemTitle
+                                )
+                        }
+                    }
+
+                    "itemref" -> {
+
+                        val idref =
+                            parser.getAttributeValue(
+                                null,
+                                "idref"
+                            )
+
+                        if (
+                            !idref.isNullOrBlank()
+                        ) {
+
+                            spine.add(
+                                idref
+                            )
+                        }
+                    }
+                }
+            }
+
+            event =
+                parser.next()
+        }
+
+        return EpubPackage(
+            title = title,
+            author = author,
+            manifest = manifest,
+            spine = spine
+        )
+    }
+
+    private fun readText(
+        parser: XmlPullParser
+    ): String {
+
+        val builder =
+            StringBuilder()
+
+        val startDepth =
+            parser.depth
+
+        var event =
+            parser.next()
+
+        while (
+            event != XmlPullParser.END_DOCUMENT
+        ) {
+
+            if (
+                event ==
+                XmlPullParser.END_TAG &&
+                parser.depth < startDepth
+            ) {
+                break
+            }
+
+            if (
+                event == XmlPullParser.TEXT ||
+                event == XmlPullParser.CDSECT
+            ) {
+
+                builder.append(
+                    parser.text
+                )
+            }
+
+            event =
+                parser.next()
+        }
+
+        return cleanText(
+            builder.toString()
+        )
+    }
+
+    private fun readHtmlContent(
+        input: InputStream
+    ): String {
+
+        val bytes =
+            input.readBytes()
+
+        val decoded =
+            decodeHtml(
+                bytes
+            )
+
+        return convertHtmlToText(
+            decoded
+        )
+    }
+
+    private fun decodeHtml(
+        bytes: ByteArray
+    ): String {
+
+        val utf8 =
+            try {
+                String(
+                    bytes,
+                    Charsets.UTF_8
+                )
+            } catch (
+                exception: Exception
+            ) {
+                ""
+            }
+
+        if (
+            utf8.contains(
+                '<'
+            ) &&
+            utf8.count {
+                it == '\uFFFD'
+            } < 10
+        ) {
+            return utf8
+        }
+
+        return String(
+            bytes,
+            Charset.forName(
+                "windows-1252"
+            )
+        )
+    }
+
+    private fun convertHtmlToText(
+        html: String
+    ): String {
+
+        return html
+
+            .replace(
+                Regex(
+                    "(?is)<script[^>]*>.*?</script>"
+                ),
+                ""
+            )
+
+            .replace(
+                Regex(
+                    "(?is)<style[^>]*>.*?</style>"
+                ),
+                ""
+            )
+
+            .replace(
+                Regex(
+                    "(?is)<head[^>]*>.*?</head>"
+                ),
+                ""
+            )
+
+            .replace(
+                Regex(
+                    "(?i)<br\\s*/?>"
+                ),
+                "\n"
+            )
+
+            .replace(
+                Regex(
+                    "(?i)</p\\s*>"
+                ),
+                "\n\n"
+            )
+
+            .replace(
+                Regex(
+                    "(?i)</div\\s*>"
+                ),
+                "\n\n"
+            )
+
+            .replace(
+                Regex(
+                    "(?i)</li\\s*>"
+                ),
+                "\n"
+            )
+
+            .replace(
+                Regex(
+                    "(?i)</h[1-6]\\s*>"
+                ),
+                "\n\n"
+            )
+
+            .replace(
+                Regex(
+                    "(?i)<li[^>]*>"
+                ),
+                "• "
+            )
+
+            .replace(
+                Regex(
+                    "<[^>]+>"
+                ),
+                ""
+            )
+
+            .replace(
+                "&nbsp;",
+                " "
+            )
+
+            .replace(
+                "&amp;",
+                "&"
+            )
+
+            .replace(
+                "&lt;",
+                "<"
+            )
+
+            .replace(
+                "&gt;",
+                ">"
+            )
+
+            .replace(
+                "&quot;",
+                "\""
+            )
+
+            .replace(
+                "&#39;",
+                "'"
+            )
+
+            .replace(
+                Regex(
+                    "&#(\\d+);"
+                )
+            ) { match ->
+
+                match.groupValues[1]
+                    .toIntOrNull()
+                    ?.let {
+                        String(
+                            Character.toChars(
+                                it
+                            )
+                        )
+                    }
+                    ?: match.value
+            }
+
+            .let {
+                cleanText(it)
+            }
+    }
+
+    private fun extractChapterTitle(
+        content: String
+    ): String {
+
+        val lines =
+            content
+                .split('\n')
+                .map {
+                    it.trim()
+                }
+                .filter {
+                    it.isNotBlank()
+                }
+
+        if (lines.isEmpty()) {
+            return ""
+        }
+
+        val first =
+            lines.first()
+
+        if (
+            first.length <= 120
+        ) {
+            return first
+        }
+
+        return ""
+    }
+
+    private fun decodeHref(
+        href: String
+    ): String {
+
+        return try {
+
+            java.net.URLDecoder.decode(
+                href,
+                "UTF-8"
+            )
+
+        } catch (
+            exception: Exception
+        ) {
+
+            href
+        }
     }
 
     private fun normalizePath(
@@ -321,25 +658,27 @@ object EpubReader {
     ): String {
 
         val parts =
-            path
-                .replace('\\', '/')
-                .split("/")
+            path.split('/')
 
         val result =
             mutableListOf<String>()
 
-        for (part in parts) {
+        for (
+            part in parts
+        ) {
 
-            when (part) {
+            when {
 
-                "",
-                "." -> {
-                    // Ignore.
+                part.isBlank() ||
+                part == "." -> {
+                    continue
                 }
 
-                ".." -> {
+                part == ".." -> {
 
-                    if (result.isNotEmpty()) {
+                    if (
+                        result.isNotEmpty()
+                    ) {
                         result.removeAt(
                             result.lastIndex
                         )
@@ -352,134 +691,27 @@ object EpubReader {
             }
         }
 
-        return result.joinToString("/")
+        return result.joinToString(
+            "/"
+        )
     }
 
-    private fun findZipEntry(
-        zip: ZipFile,
-        path: String
-    ): java.util.zip.ZipEntry? {
-
-        zip.getEntry(path)?.let {
-            return it
-        }
-
-        val normalized =
-            normalizePath(path)
-
-        zip.entries()
-            .asSequence()
-            .forEach { entry ->
-
-                if (
-                    normalizePath(
-                        entry.name
-                    ) == normalized
-                ) {
-                    return entry
-                }
-            }
-
-        return null
-    }
-
-    private fun extractHeading(
-        html: String
-    ): String? {
-
-        val match =
-            Regex(
-                "(?is)<h[1-6][^>]*>(.*?)</h[1-6]>"
-            )
-                .find(html)
-
-        return match
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.let {
-                htmlToText(it)
-            }
-            ?.takeIf {
-                it.isNotBlank()
-            }
-    }
-
-    private fun htmlToText(
-        html: String
+    private fun cleanText(
+        value: String
     ): String {
 
-        return html
+        return value
             .replace(
-                Regex(
-                    "(?is)<script.*?>.*?</script>"
-                ),
-                ""
+                '\u00A0',
+                ' '
             )
             .replace(
-                Regex(
-                    "(?is)<style.*?>.*?</style>"
-                ),
-                ""
-            )
-            .replace(
-                Regex(
-                    "(?i)<br\\s*/?>"
-                ),
+                "\r\n",
                 "\n"
             )
             .replace(
-                Regex(
-                    "(?i)</p\\s*>"
-                ),
-                "\n\n"
-            )
-            .replace(
-                Regex(
-                    "(?i)</div\\s*>"
-                ),
-                "\n\n"
-            )
-            .replace(
-                Regex(
-                    "(?i)</li\\s*>"
-                ),
-                "\n"
-            )
-            .replace(
-                Regex(
-                    "(?i)</h[1-6]\\s*>"
-                ),
-                "\n\n"
-            )
-            .replace(
-                Regex(
-                    "<[^>]+>"
-                ),
-                ""
-            )
-            .replace(
-                "&nbsp;",
-                " "
-            )
-            .replace(
-                "&amp;",
-                "&"
-            )
-            .replace(
-                "&lt;",
-                "<"
-            )
-            .replace(
-                "&gt;",
-                ">"
-            )
-            .replace(
-                "&quot;",
-                "\""
-            )
-            .replace(
-                "&#39;",
-                "'"
+                '\r',
+                '\n'
             )
             .replace(
                 Regex(
@@ -495,4 +727,65 @@ object EpubReader {
             )
             .trim()
     }
+
+    private fun getDocumentName(
+        context: Context,
+        uri: Uri
+    ): String {
+
+        var name =
+            "EPUB Document"
+
+        context.contentResolver
+            .query(
+                uri,
+                arrayOf(
+                    android.provider.OpenableColumns.DISPLAY_NAME
+                ),
+                null,
+                null,
+                null
+            )
+            ?.use { cursor ->
+
+                if (
+                    cursor.moveToFirst()
+                ) {
+
+                    val index =
+                        cursor.getColumnIndex(
+                            android.provider.OpenableColumns.DISPLAY_NAME
+                        )
+
+                    if (
+                        index >= 0
+                    ) {
+
+                        name =
+                            cursor.getString(
+                                index
+                            )
+                    }
+                }
+            }
+
+        return name.substringBeforeLast(
+            '.',
+            name
+        )
+    }
+
+    private data class EpubPackage(
+        val title: String?,
+        val author: String?,
+        val manifest:
+            Map<String, ManifestItem>,
+        val spine: List<String>
+    )
+
+    private data class ManifestItem(
+        val id: String,
+        val href: String,
+        val title: String?
+    )
 }
