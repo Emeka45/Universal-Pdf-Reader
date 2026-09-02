@@ -7,7 +7,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
@@ -19,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +37,10 @@ fun ReaderDocumentScreen(
 
     var showChapterList by remember {
         mutableStateOf(false)
+    }
+
+    var selectedChapter by remember {
+        mutableStateOf(0)
     }
 
     BackHandler {
@@ -58,10 +64,7 @@ fun ReaderDocumentScreen(
                 navigationIcon = {
 
                     IconButton(
-                        onClick = {
-                            // Let the Activity handle the
-                            // actual navigation back.
-                        }
+                        onClick = {}
                     ) {
 
                         Icon(
@@ -101,6 +104,18 @@ fun ReaderDocumentScreen(
             ChapterList(
                 document = document,
 
+                selectedChapter =
+                    selectedChapter,
+
+                onChapterSelected = { index ->
+
+                    selectedChapter =
+                        index
+
+                    showChapterList =
+                        false
+                },
+
                 modifier =
                     Modifier.padding(
                         paddingValues
@@ -111,6 +126,9 @@ fun ReaderDocumentScreen(
 
             DocumentContent(
                 document = document,
+
+                selectedChapter =
+                    selectedChapter,
 
                 modifier =
                     Modifier.padding(
@@ -124,6 +142,8 @@ fun ReaderDocumentScreen(
 @Composable
 private fun ChapterList(
     document: ReaderDocument,
+    selectedChapter: Int,
+    onChapterSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
 
@@ -158,17 +178,28 @@ private fun ChapterList(
             )
         }
 
-        items(
+        itemsIndexed(
             document.chapters
-        ) { chapter ->
+        ) { index, chapter ->
 
             Text(
-                text = chapter.title,
+                text =
+                    "${index + 1}. ${chapter.title}",
 
                 style =
                     MaterialTheme
                         .typography
                         .bodyLarge,
+
+                fontWeight =
+                    if (
+                        index ==
+                        selectedChapter
+                    ) {
+                        FontWeight.Bold
+                    } else {
+                        FontWeight.Normal
+                    },
 
                 modifier =
                     Modifier
@@ -177,7 +208,10 @@ private fun ChapterList(
                             horizontal = 20.dp,
                             vertical = 14.dp
                         )
-            )
+                        .then(
+                            Modifier
+                        )
+            }
         }
     }
 }
@@ -185,10 +219,30 @@ private fun ChapterList(
 @Composable
 private fun DocumentContent(
     document: ReaderDocument,
+    selectedChapter: Int,
     modifier: Modifier = Modifier
 ) {
 
+    val listState =
+        rememberLazyListState()
+
+    LaunchedEffect(
+        selectedChapter
+    ) {
+
+        if (
+            document.chapters.isNotEmpty()
+        ) {
+
+            listState.animateScrollToItem(
+                selectedChapter + 1
+            )
+        }
+    }
+
     LazyColumn(
+        state = listState,
+
         modifier =
             modifier.fillMaxSize(),
 
@@ -211,7 +265,8 @@ private fun DocumentContent(
             ) {
 
                 Text(
-                    text = document.title,
+                    text =
+                        document.title,
 
                     style =
                         MaterialTheme
@@ -241,9 +296,9 @@ private fun DocumentContent(
             }
         }
 
-        items(
+        itemsIndexed(
             document.chapters
-        ) { chapter ->
+        ) { _, chapter ->
 
             Column(
                 modifier =
@@ -255,7 +310,8 @@ private fun DocumentContent(
             ) {
 
                 Text(
-                    text = chapter.title,
+                    text =
+                        chapter.title,
 
                     style =
                         MaterialTheme
@@ -267,7 +323,8 @@ private fun DocumentContent(
                 )
 
                 Text(
-                    text = chapter.content,
+                    text =
+                        chapter.content,
 
                     style =
                         MaterialTheme
