@@ -2,7 +2,6 @@ package com.coeric.universalreader
 
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
-import android.os.ParcelFileDescriptor
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -13,13 +12,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -30,6 +29,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,7 +41,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.runtime.produceState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
@@ -70,17 +70,19 @@ fun PdfReaderView(
         mutableStateOf<String?>(null)
     }
 
-    val savedPosition =
-        remember(uri) {
-            ReadingPositionRepository.get(
-                context,
-                uri.toString()
-            )
-        }
+    var positionLoaded by remember {
+        mutableStateOf(false)
+    }
 
     LaunchedEffect(uri) {
 
         try {
+
+            val savedPosition =
+                ReadingPositionRepository.get(
+                    context,
+                    uri.toString()
+                )
 
             pageCount =
                 withContext(
@@ -88,7 +90,8 @@ fun PdfReaderView(
                 ) {
 
                     val descriptor =
-                        context.contentResolver
+                        context
+                            .contentResolver
                             .openFileDescriptor(
                                 uri,
                                 "r"
@@ -99,9 +102,7 @@ fun PdfReaderView(
 
                     descriptor.use {
 
-                        PdfRenderer(
-                            it
-                        ).use { renderer ->
+                        PdfRenderer(it).use { renderer ->
 
                             renderer.pageCount
                         }
@@ -109,6 +110,7 @@ fun PdfReaderView(
                 }
 
             if (
+                pageCount > 0 &&
                 savedPosition != null
             ) {
 
@@ -116,12 +118,11 @@ fun PdfReaderView(
                     savedPosition.chapterIndex
                         .coerceIn(
                             0,
-                            max(
-                                0,
-                                pageCount - 1
-                            )
+                            pageCount - 1
                         )
             }
+
+            positionLoaded = true
 
         } catch (
             exception: Exception
@@ -141,7 +142,10 @@ fun PdfReaderView(
             key3 = zoom
         ) {
 
-            if (pageCount <= 0) {
+            if (
+                pageCount <= 0 ||
+                !positionLoaded
+            ) {
                 value = null
                 return@produceState
             }
@@ -212,7 +216,9 @@ fun PdfReaderView(
                                             bitmap,
                                             null,
                                             null,
-                                            PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
+                                            PdfRenderer
+                                                .Page
+                                                .RENDER_MODE_FOR_DISPLAY
                                         )
 
                                         bitmap
@@ -233,6 +239,38 @@ fun PdfReaderView(
                 }
         }
 
+    LaunchedEffect(
+        currentPage,
+        pageCount,
+        positionLoaded
+    ) {
+
+        if (
+            positionLoaded &&
+            pageCount > 0
+        ) {
+
+            ReadingPositionRepository.save(
+
+                context,
+
+                ReadingPosition(
+                    documentUri =
+                        uri.toString(),
+
+                    chapterIndex =
+                        currentPage,
+
+                    scrollIndex =
+                        0,
+
+                    scrollOffset =
+                        0
+                )
+            )
+        }
+    }
+
     when {
 
         error != null -> {
@@ -244,7 +282,8 @@ fun PdfReaderView(
             )
         }
 
-        pageCount == 0 -> {
+        pageCount == 0 ||
+        !positionLoaded -> {
 
             Box(
                 modifier =
@@ -254,10 +293,7 @@ fun PdfReaderView(
                     Alignment.Center
             ) {
 
-                Text(
-                    text =
-                        "Loading PDF..."
-                )
+                CircularProgressIndicator()
             }
         }
 
@@ -272,30 +308,6 @@ fun PdfReaderView(
             val bitmap =
                 bitmapState.value
 
-            LaunchedEffect(
-                safePage
-            ) {
-
-                ReadingPositionRepository.save(
-
-                    context,
-
-                    ReadingPosition(
-                        documentUri =
-                            uri.toString(),
-
-                        chapterIndex =
-                            safePage,
-
-                        scrollIndex =
-                            0,
-
-                        scrollOffset =
-                            0
-                    )
-                )
-            }
-
             Column(
                 modifier =
                     Modifier
@@ -309,11 +321,7 @@ fun PdfReaderView(
 
                 Row(
                     modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                horizontal = 4.dp
-                            ),
+                        Modifier.fillMaxWidth(),
 
                     verticalAlignment =
                         Alignment.CenterVertically,
@@ -338,7 +346,8 @@ fun PdfReaderView(
 
                         Icon(
                             imageVector =
-                                Icons.Default.KeyboardArrowLeft,
+                                Icons.Default
+                                    .KeyboardArrowLeft,
 
                             contentDescription =
                                 "Previous page"
@@ -372,7 +381,8 @@ fun PdfReaderView(
 
                         Icon(
                             imageVector =
-                                Icons.Default.KeyboardArrowRight,
+                                Icons.Default
+                                    .KeyboardArrowRight,
 
                             contentDescription =
                                 "Next page"
@@ -398,12 +408,7 @@ fun PdfReaderView(
 
                 Row(
                     modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                horizontal = 8.dp,
-                                vertical = 4.dp
-                            ),
+                        Modifier.fillMaxWidth(),
 
                     horizontalArrangement =
                         Arrangement.Center,
@@ -470,7 +475,7 @@ fun PdfReaderView(
                             Alignment.Center
                     ) {
 
-                        CircularProgressIndicatorCompat()
+                        CircularProgressIndicator()
                     }
 
                 } else {
@@ -495,9 +500,7 @@ fun PdfReaderView(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
-                                        .scale(
-                                            1f
-                                        )
+                                        .scale(1f)
                                         .pointerInput(
                                             zoom
                                         ) {
@@ -516,13 +519,6 @@ fun PdfReaderView(
 }
 
 @Composable
-private fun CircularProgressIndicatorCompat() {
-
-    androidx.compose.material3
-        .CircularProgressIndicator()
-}
-
-@Composable
 private fun PdfErrorScreen(
     message: String
 ) {
@@ -537,12 +533,7 @@ private fun PdfErrorScreen(
 
         Text(
             text =
-                message,
-
-            modifier =
-                Modifier.padding(
-                    24.dp
-                )
+                message
         )
     }
 }
