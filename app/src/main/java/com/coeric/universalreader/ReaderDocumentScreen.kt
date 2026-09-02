@@ -34,19 +34,41 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderDocumentScreen(
-    document: ReaderDocument
+    document: ReaderDocument,
+    documentUri: String
 ) {
+
+    val context =
+        androidx.compose.ui.platform.LocalContext.current
 
     val backDispatcher =
         LocalOnBackPressedDispatcherOwner.current
             ?.onBackPressedDispatcher
+
+    val savedPosition =
+        remember(documentUri) {
+
+            ReadingPositionRepository.get(
+                context,
+                documentUri
+            )
+        }
 
     var showChapterList by remember {
         mutableStateOf(false)
     }
 
     var selectedChapter by remember {
-        mutableStateOf(0)
+
+        mutableStateOf(
+            savedPosition?.chapterIndex
+                ?.coerceIn(
+                    0,
+                    (document.chapters.size - 1)
+                        .coerceAtLeast(0)
+                )
+                ?: 0
+        )
     }
 
     BackHandler {
@@ -79,9 +101,12 @@ fun ReaderDocumentScreen(
                     IconButton(
                         onClick = {
 
-                            if (showChapterList) {
+                            if (
+                                showChapterList
+                            ) {
 
-                                showChapterList = false
+                                showChapterList =
+                                    false
 
                             } else {
 
@@ -137,6 +162,23 @@ fun ReaderDocumentScreen(
                     selectedChapter =
                         index
 
+                    ReadingPositionRepository.save(
+                        context,
+                        ReadingPosition(
+                            documentUri =
+                                documentUri,
+
+                            chapterIndex =
+                                index,
+
+                            scrollIndex =
+                                0,
+
+                            scrollOffset =
+                                0
+                        )
+                    )
+
                     showChapterList =
                         false
                 },
@@ -154,6 +196,9 @@ fun ReaderDocumentScreen(
 
                 selectedChapter =
                     selectedChapter,
+
+                documentUri =
+                    documentUri,
 
                 modifier =
                     Modifier.padding(
@@ -221,8 +266,11 @@ private fun ChapterList(
                         index ==
                         selectedChapter
                     ) {
+
                         FontWeight.Bold
+
                     } else {
+
                         FontWeight.Normal
                     },
 
@@ -248,24 +296,70 @@ private fun ChapterList(
 private fun DocumentContent(
     document: ReaderDocument,
     selectedChapter: Int,
+    documentUri: String,
     modifier: Modifier = Modifier
 ) {
+
+    val context =
+        androidx.compose.ui.platform.LocalContext.current
 
     val listState =
         rememberLazyListState()
 
+    val savedPosition =
+        remember(documentUri) {
+
+            ReadingPositionRepository.get(
+                context,
+                documentUri
+            )
+        }
+
     LaunchedEffect(
-        selectedChapter
+        savedPosition
     ) {
 
         if (
-            document.chapters.isNotEmpty()
+            savedPosition != null &&
+            savedPosition.chapterIndex ==
+                selectedChapter
         ) {
 
-            listState.animateScrollToItem(
-                selectedChapter + 1
+            listState.scrollToItem(
+                savedPosition.scrollIndex
+                    .coerceAtLeast(0),
+
+                savedPosition.scrollOffset
+                    .coerceAtLeast(0)
             )
         }
+    }
+
+    LaunchedEffect(
+        listState.firstVisibleItemIndex,
+        listState.firstVisibleItemScrollOffset,
+        selectedChapter
+    ) {
+
+        ReadingPositionRepository.save(
+            context,
+
+            ReadingPosition(
+                documentUri =
+                    documentUri,
+
+                chapterIndex =
+                    selectedChapter,
+
+                scrollIndex =
+                    listState
+                        .firstVisibleItemIndex,
+
+                scrollOffset =
+                    listState
+                        .firstVisibleItemScrollOffset
+            )
+        )
     }
 
     LazyColumn(
