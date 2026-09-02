@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -140,9 +139,11 @@ fun ReaderDocumentScreen(
             document = document,
             documentUri = documentUri,
             chapterIndex = selectedChapter,
+
             onDismiss = {
                 showAddBookmark = false
             },
+
             onAdded = {
                 bookmarks =
                     BookmarkRepository.getBookmarks(
@@ -199,6 +200,7 @@ fun ReaderDocumentScreen(
                         Icon(
                             imageVector =
                                 Icons.Default.ArrowBack,
+
                             contentDescription =
                                 "Back"
                         )
@@ -206,6 +208,7 @@ fun ReaderDocumentScreen(
                 },
 
                 actions = {
+
                     IconButton(
                         onClick = {
                             showAddBookmark = true
@@ -218,6 +221,7 @@ fun ReaderDocumentScreen(
                         Icon(
                             imageVector =
                                 Icons.Default.Bookmark,
+
                             contentDescription =
                                 "Add bookmark"
                         )
@@ -225,6 +229,7 @@ fun ReaderDocumentScreen(
 
                     IconButton(
                         onClick = {
+
                             showBookmarks =
                                 !showBookmarks
 
@@ -236,6 +241,7 @@ fun ReaderDocumentScreen(
                         Icon(
                             imageVector =
                                 Icons.Default.Star,
+
                             contentDescription =
                                 "Bookmarks"
                         )
@@ -243,6 +249,7 @@ fun ReaderDocumentScreen(
 
                     IconButton(
                         onClick = {
+
                             showHighlights =
                                 !showHighlights
 
@@ -254,6 +261,7 @@ fun ReaderDocumentScreen(
                         Icon(
                             imageVector =
                                 Icons.Default.Star,
+
                             contentDescription =
                                 "Highlights"
                         )
@@ -261,6 +269,7 @@ fun ReaderDocumentScreen(
 
                     IconButton(
                         onClick = {
+
                             showSettings =
                                 !showSettings
 
@@ -272,6 +281,7 @@ fun ReaderDocumentScreen(
                         Icon(
                             imageVector =
                                 Icons.Default.Settings,
+
                             contentDescription =
                                 "Reader settings"
                         )
@@ -279,6 +289,7 @@ fun ReaderDocumentScreen(
 
                     IconButton(
                         onClick = {
+
                             showChapterList =
                                 !showChapterList
 
@@ -290,6 +301,7 @@ fun ReaderDocumentScreen(
                         Icon(
                             imageVector =
                                 Icons.Default.Menu,
+
                             contentDescription =
                                 "Chapters"
                         )
@@ -300,12 +312,15 @@ fun ReaderDocumentScreen(
     ) { paddingValues ->
 
         when {
+
             showSettings -> {
+
                 ReaderSettingsPanel(
                     settings = settings,
 
                     onSettingsChanged = {
                         newSettings ->
+
                         settings =
                             newSettings
 
@@ -319,10 +334,11 @@ fun ReaderDocumentScreen(
                         Modifier.padding(
                             paddingValues
                         )
-                }
+                )
             }
 
             showChapterList -> {
+
                 ChapterList(
                     document =
                         document,
@@ -332,6 +348,7 @@ fun ReaderDocumentScreen(
 
                     onChapterSelected = {
                         index ->
+
                         selectedChapter =
                             index
 
@@ -365,6 +382,7 @@ fun ReaderDocumentScreen(
             }
 
             showBookmarks -> {
+
                 BookmarkList(
                     bookmarks =
                         bookmarks,
@@ -392,6 +410,7 @@ fun ReaderDocumentScreen(
             }
 
             showHighlights -> {
+
                 HighlightList(
                     highlights =
                         highlights,
@@ -419,6 +438,7 @@ fun ReaderDocumentScreen(
             }
 
             else -> {
+
                 DocumentContent(
                     document =
                         document,
@@ -433,11 +453,13 @@ fun ReaderDocumentScreen(
                         settings,
 
                     onHighlightAdded = {
+
                         highlights =
-                            HighlightRepository.getHighlights(
-                                context,
-                                documentUri
-                            )
+                            HighlightRepository
+                                .getHighlights(
+                                    context,
+                                    documentUri
+                                )
                     },
 
                     modifier =
@@ -466,7 +488,9 @@ private fun ChapterList(
                 2.dp
             )
     ) {
+
         item {
+
             Text(
                 text = "Chapters",
 
@@ -536,7 +560,9 @@ private fun BookmarkList(
                 8.dp
             )
     ) {
+
         item {
+
             Text(
                 text = "Bookmarks",
 
@@ -557,7 +583,9 @@ private fun BookmarkList(
         }
 
         if (bookmarks.isEmpty()) {
+
             item {
+
                 Text(
                     text =
                         "No bookmarks yet.",
@@ -584,6 +612,7 @@ private fun BookmarkList(
                             vertical = 8.dp
                         )
             ) {
+
                 Text(
                     text =
                         bookmark.title,
@@ -617,7 +646,10 @@ private fun BookmarkList(
                             top = 6.dp
                         )
                 ) {
-                    Text("Delete")
+
+                    Text(
+                        text = "Delete"
+                    )
                 }
             }
         }
@@ -639,7 +671,9 @@ private fun HighlightList(
                 8.dp
             )
     ) {
+
         item {
+
             Text(
                 text = "Highlights",
 
@@ -660,7 +694,9 @@ private fun HighlightList(
         }
 
         if (highlights.isEmpty()) {
+
             item {
+
                 Text(
                     text =
                         "No highlights yet.",
@@ -687,6 +723,7 @@ private fun HighlightList(
                             vertical = 8.dp
                         )
             ) {
+
                 Text(
                     text =
                         "\"${highlight.selectedText}\"",
@@ -718,6 +755,7 @@ private fun HighlightList(
                 if (
                     highlight.note.isNotBlank()
                 ) {
+
                     Text(
                         text =
                             highlight.note,
@@ -744,7 +782,10 @@ private fun HighlightList(
                             top = 6.dp
                         )
                 ) {
-                    Text("Delete")
+
+                    Text(
+                        text = "Delete"
+                    )
                 }
             }
         }
@@ -763,9 +804,13 @@ private fun AddBookmarkDialog(
         androidx.compose.ui.platform.LocalContext.current
 
     var title by remember {
+
         mutableStateOf(
+
             document.chapters
-                .getOrNull(chapterIndex)
+                .getOrNull(
+                    chapterIndex
+                )
                 ?.title
                 ?: "Bookmark"
         )
@@ -776,19 +821,27 @@ private fun AddBookmarkDialog(
             onDismiss,
 
         title = {
-            Text("Add Bookmark")
+            Text(
+                text =
+                    "Add Bookmark"
+            )
         },
 
         text = {
+
             TextField(
-                value = title,
+                value =
+                    title,
 
                 onValueChange = {
                     title = it
                 },
 
                 label = {
-                    Text("Bookmark title")
+                    Text(
+                        text =
+                            "Bookmark title"
+                    )
                 },
 
                 modifier =
@@ -797,9 +850,12 @@ private fun AddBookmarkDialog(
         },
 
         confirmButton = {
+
             Button(
                 onClick = {
+
                     BookmarkRepository.addBookmark(
+
                         context =
                             context,
 
@@ -818,16 +874,23 @@ private fun AddBookmarkDialog(
                     onAdded()
                 }
             ) {
-                Text("Save")
+
+                Text(
+                    text = "Save"
+                )
             }
         },
 
         dismissButton = {
+
             TextButton(
                 onClick =
                     onDismiss
             ) {
-                Text("Cancel")
+
+                Text(
+                    text = "Cancel"
+                )
             }
         }
     )
@@ -850,6 +913,7 @@ private fun DocumentContent(
 
     val savedPosition =
         remember(documentUri) {
+
             ReadingPositionRepository.get(
                 context,
                 documentUri
@@ -859,17 +923,24 @@ private fun DocumentContent(
     LaunchedEffect(
         savedPosition
     ) {
+
         if (
             savedPosition != null
         ) {
+
             listState.scrollToItem(
+
                 savedPosition
                     .scrollIndex
-                    .coerceAtLeast(0),
+                    .coerceAtLeast(
+                        0
+                    ),
 
                 savedPosition
                     .scrollOffset
-                    .coerceAtLeast(0)
+                    .coerceAtLeast(
+                        0
+                    )
             )
         }
     }
@@ -879,10 +950,13 @@ private fun DocumentContent(
         listState.firstVisibleItemScrollOffset,
         selectedChapter
     ) {
+
         ReadingPositionRepository.save(
+
             context,
 
             ReadingPosition(
+
                 documentUri =
                     documentUri,
 
@@ -904,6 +978,7 @@ private fun DocumentContent(
         when (
             settings.textAlignment
         ) {
+
             ReaderTextAlignment.LEFT ->
                 TextAlign.Start
 
@@ -913,6 +988,7 @@ private fun DocumentContent(
 
     val textStyle =
         TextStyle(
+
             fontSize =
                 settings.fontSize.sp,
 
@@ -943,7 +1019,9 @@ private fun DocumentContent(
                 18.dp
             )
     ) {
+
         item {
+
             Column(
                 modifier =
                     Modifier
@@ -953,6 +1031,7 @@ private fun DocumentContent(
                             vertical = 24.dp
                         )
             ) {
+
                 Text(
                     text =
                         document.title,
@@ -999,6 +1078,7 @@ private fun DocumentContent(
                             horizontal = 22.dp
                         )
             ) {
+
                 Row(
                     modifier =
                         Modifier.fillMaxWidth(),
@@ -1006,6 +1086,7 @@ private fun DocumentContent(
                     horizontalArrangement =
                         Arrangement.SpaceBetween
                 ) {
+
                     Text(
                         text =
                             chapter.title,
@@ -1021,21 +1102,27 @@ private fun DocumentContent(
 
                     IconButton(
                         onClick = {
-                            BookmarkRepository.addBookmark(
-                                context =
-                                    context,
 
-                                documentUri =
-                                    documentUri,
+                            BookmarkRepository
+                                .addBookmark(
 
-                                chapterIndex =
-                                    index,
+                                    context =
+                                        context,
 
-                                title =
-                                    chapter.title
-                            )
+                                    documentUri =
+                                        documentUri,
+
+                                    chapterIndex =
+                                        index,
+
+                                    title =
+                                        chapter.title
+                                )
+
+                            onHighlightAdded()
                         }
                     ) {
+
                         Icon(
                             imageVector =
                                 Icons.Default.Bookmark,
@@ -1046,21 +1133,28 @@ private fun DocumentContent(
                     }
                 }
 
-                SelectionContainer {
-                    Text(
-                        text =
-                            chapter.content,
+                SelectableHighlightText(
+                    text =
+                        chapter.content,
 
-                        style =
-                            textStyle,
+                    documentUri =
+                        documentUri,
 
-                        modifier =
-                            Modifier.padding(
-                                top = 10.dp,
-                                bottom = 10.dp
-                            )
-                    )
-                }
+                    chapterIndex =
+                        index,
+
+                    textStyle =
+                        textStyle,
+
+                    onHighlightAdded =
+                        onHighlightAdded,
+
+                    modifier =
+                        Modifier.padding(
+                            top = 10.dp,
+                            bottom = 10.dp
+                        )
+                )
             }
         }
     }
