@@ -1,6 +1,5 @@
 package com.coeric.universalreader
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -23,6 +22,7 @@ fun UniversalReaderTheme(
 
             ReaderTheme.SEPIA ->
                 lightColorScheme(
+
                     background =
                         Color(0xFFF4ECD8),
 
