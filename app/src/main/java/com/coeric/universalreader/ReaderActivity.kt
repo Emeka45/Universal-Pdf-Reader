@@ -47,7 +47,7 @@ class ReaderActivity : ComponentActivity() {
                     ReaderScreen(
                         uri = Uri.parse(documentUri),
                         onBack = {
-                            finish()
+                           finish()
                         }
                     )
 
