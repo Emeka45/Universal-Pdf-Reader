@@ -2,6 +2,7 @@
 
 package com.coeric.universalreader
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -163,7 +164,9 @@ fun UniversalReaderHome() {
                         contentDescription = null
                     )
 
-                    Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+                    Spacer(
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
 
                     Text("Open File")
                 }
@@ -212,7 +215,10 @@ fun UniversalReaderHome() {
 
                 } else {
 
-                    DocumentCard(selectedDocument!!)
+                    DocumentCard(
+                        document = selectedDocument!!,
+                        context = context
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -230,6 +236,7 @@ fun UniversalReaderHome() {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+
                     QuickAccessCard(
                         title = "Folders",
                         icon = Icons.Default.Folder,
@@ -250,14 +257,19 @@ fun UniversalReaderHome() {
 }
 
 @Composable
-fun DocumentCard(document: DocumentInfo) {
+fun DocumentCard(
+    document: DocumentInfo,
+    context: android.content.Context
+) {
 
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
+
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
+
             Text(
                 text = document.name,
                 style = MaterialTheme.typography.titleMedium
@@ -279,7 +291,21 @@ fun DocumentCard(document: DocumentInfo) {
             Spacer(modifier = Modifier.height(12.dp))
 
             Button(
-                onClick = {}
+                onClick = {
+
+                    val intent = Intent(
+                        context,
+                        ReaderActivity::class.java
+                    ).apply {
+
+                        putExtra(
+                            "document_uri",
+                            document.uri
+                        )
+                    }
+
+                    context.startActivity(intent)
+                }
             ) {
                 Text("Open Reader")
             }
@@ -293,15 +319,18 @@ fun QuickAccessCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     modifier: Modifier = Modifier
 ) {
+
     Card(
         modifier = modifier
     ) {
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+
             Icon(
                 imageVector = icon,
                 contentDescription = title
