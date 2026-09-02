@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 class ReaderActivity : ComponentActivity() {
@@ -30,16 +31,17 @@ class ReaderActivity : ComponentActivity() {
     ) {
         super.onCreate(savedInstanceState)
 
-        val uriString =
+        val uri =
             intent.getStringExtra("uri")
+                ?.let {
+                    Uri.parse(it)
+                }
+                ?: intent.data
 
-        if (uriString.isNullOrBlank()) {
+        if (uri == null) {
             finish()
             return
         }
-
-        val uri =
-            Uri.parse(uriString)
 
         setContent {
             ReaderContent(
@@ -55,7 +57,7 @@ private fun ReaderContent(
 ) {
 
     val context =
-        androidx.compose.ui.platform.LocalContext.current
+        LocalContext.current
 
     var format by remember {
         mutableStateOf<DocumentFormat?>(null)
@@ -145,7 +147,7 @@ private fun RoutedDocumentContent(
 ) {
 
     val context =
-        androidx.compose.ui.platform.LocalContext.current
+        LocalContext.current
 
     var document by remember {
         mutableStateOf<ReaderDocument?>(null)
@@ -206,7 +208,7 @@ private fun CbzReaderContent(
 ) {
 
     val context =
-        androidx.compose.ui.platform.LocalContext.current
+        LocalContext.current
 
     var archive by remember {
         mutableStateOf<ComicArchive?>(null)
@@ -380,11 +382,12 @@ private fun ErrorScreen(
     ) {
 
         Text(
-            text = message,
+            text =
+                message,
 
             modifier =
                 Modifier.padding(
-                   24.dp
+                    24.dp
                 )
         )
     }
