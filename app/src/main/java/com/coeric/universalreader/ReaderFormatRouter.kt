@@ -66,6 +66,13 @@ object ReaderFormatRouter {
                     uri
                 )
 
+            DocumentFormat.HTML,
+            DocumentFormat.XHTML ->
+                HtmlReader.open(
+                    context,
+                    uri
+                )
+
             DocumentFormat.CBZ ->
                 throw UnsupportedOperationException(
                     "CBZ uses the comic reader."
