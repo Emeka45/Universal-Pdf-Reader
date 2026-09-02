@@ -5,7 +5,6 @@ import android.net.Uri
 import com.github.junrar.Archive
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 
 object CbrReader {
 
@@ -36,10 +35,9 @@ object CbrReader {
                 temporaryFile
             ).use { archive ->
 
-                val headers =
-                    archive.fileHeaders
-
-                for (header in headers) {
+                for (
+                    header in archive.fileHeaders
+                ) {
 
                     if (header.isDirectory) {
                         continue
@@ -78,7 +76,9 @@ object CbrReader {
                             )
                         )
 
-                    } catch (exception: Exception) {
+                    } catch (
+                        exception: Exception
+                    ) {
 
                         pageFile.delete()
 
@@ -88,9 +88,10 @@ object CbrReader {
             }
 
             pages.sortWith(
-                compareBy {
-                    naturalSortKey(
-                        it.name
+                Comparator { first, second ->
+                    naturalCompare(
+                        first.name,
+                        second.name
                     )
                 }
             )
@@ -166,21 +167,100 @@ object CbrReader {
         return ".$extension"
     }
 
-    private fun naturalSortKey(
-        name: String
-    ): String {
+    private fun naturalCompare(
+        first: String,
+        second: String
+    ): Int {
 
-        return name
-            .lowercase()
-            .replace(
-                Regex("\\d+")
-            ) { match ->
+        val firstParts =
+            splitNaturalParts(
+                first
+            )
 
-                match.value
-                    .padStart(
-                        12,
-                        '0'
-                    )
+        val secondParts =
+            splitNaturalParts(
+                second
+            )
+
+        val size =
+            minOf(
+                firstParts.size,
+                secondParts.size
+            )
+
+        for (
+            index in 0 until size
+        ) {
+
+            val a =
+                firstParts[index]
+
+            val b =
+                secondParts[index]
+
+            val result =
+
+                if (
+                    a is Long &&
+                    b is Long
+                ) {
+
+                    a.compareTo(b)
+
+                } else {
+
+                    a.toString()
+                        .lowercase()
+                        .compareTo(
+                            b.toString()
+                                .lowercase()
+                        )
+                }
+
+            if (result != 0) {
+                return result
             }
+        }
+
+        return firstParts.size.compareTo(
+            secondParts.size
+        )
+    }
+
+    private fun splitNaturalParts(
+        value: String
+    ): List<Any> {
+
+        val result =
+            mutableListOf<Any>()
+
+        val regex =
+            Regex("\\d+|\\D+")
+
+        for (
+            match in regex.findAll(value)
+        ) {
+
+            val part =
+                match.value
+
+            if (
+                part.all {
+                    it.isDigit()
+                }
+            ) {
+
+                result.add(
+                    part.toLongOrNull()
+                        ?: Long.MAX_VALUE
+                )
+
+            } else {
+
+                result.add(part)
+            }
+        }
+
+        return result
     }
 }
