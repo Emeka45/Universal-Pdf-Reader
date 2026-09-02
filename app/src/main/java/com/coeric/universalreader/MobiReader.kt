@@ -4,24 +4,8 @@ import android.content.Context
 import android.net.Uri
 import java.io.ByteArrayOutputStream
 import java.nio.charset.Charset
-import java.nio.charset.StandardCharsets
 
 object MobiReader {
-
-    private data class PalmRecord(
-        val offset: Int,
-        val length: Int
-    )
-
-    private data class MobiHeader(
-        val offset: Int,
-        val length: Int,
-        val type: Int,
-        val textEncoding: Int,
-        val uniqueId: Int,
-        val firstNonBookIndex: Int,
-        val compression: Int
-    )
 
     suspend fun open(
         context: Context,
@@ -32,7 +16,7 @@ object MobiReader {
             context.contentResolver
                 .openInputStream(uri)
                 ?.use { it.readBytes() }
-                ?: throw IllegalStateException(
+                ?: throw IllegalArgumentException(
                     "Unable to open MOBI file."
                 )
 
@@ -47,52 +31,51 @@ object MobiReader {
 
         if (records.isEmpty()) {
             throw IllegalArgumentException(
-                "No Palm database records found."
+                "No readable records found in MOBI file."
             )
         }
 
         val mobiHeader =
             findMobiHeader(
-                bytes,
                 records
             )
-                ?: throw IllegalArgumentException(
-                    "MOBI header not found."
-                )
 
         val formatInfo =
             MobiFormatDetector.detect(
                 bytes,
-                mobiHeader.offset
+                mobiHeader
             )
 
         val title =
             formatInfo.title
-                ?: detectTitle(
-                    bytes,
-                    records,
-                    mobiHeader
+                ?: getDocumentName(
+                    context,
+                    uri
                 )
-                ?: "MOBI Book"
 
         val author =
             formatInfo.author
 
-        val text =
-            extractBookText(
-                bytes,
+        val textRecords =
+            extractTextRecords(
                 records,
                 mobiHeader
             )
 
-        if (text.isBlank()) {
+        if (textRecords.isEmpty()) {
             throw IllegalArgumentException(
                 "No readable text was found in this MOBI file."
             )
         }
 
+        val text =
+            decodeText(
+                textRecords,
+                mobiHeader?.textEncoding ?: 65001
+            )
+
         val chapters =
-            splitIntoChapters(text)
+            createChapters(text)
 
         return ReaderDocument(
             title = title,
@@ -103,7 +86,7 @@ object MobiReader {
 
     private fun parsePalmRecords(
         bytes: ByteArray
-    ): List<PalmRecord> {
+    ): List<ByteArray> {
 
         if (bytes.size < 78) {
             return emptyList()
@@ -115,33 +98,34 @@ object MobiReader {
                 76
             )
 
-        if (
-            recordCount <= 0 ||
-            recordCount > 100000
-        ) {
+        if (recordCount <= 0) {
             return emptyList()
         }
 
-        val recordListStart = 78
+        val tableStart = 78
 
-        if (
-            recordListStart +
-            recordCount * 8 >
-            bytes.size
-        ) {
+        val maximumRecords =
+            minOf(
+                recordCount,
+                (bytes.size - tableStart) / 8
+            )
+
+        if (maximumRecords <= 0) {
             return emptyList()
         }
 
-        val records =
-            mutableListOf<PalmRecord>()
+        val offsets =
+            mutableListOf<Int>()
 
-        for (
-            index in 0 until recordCount
-        ) {
+        for (index in 0 until maximumRecords) {
 
             val entry =
-                recordListStart +
+                tableStart +
                     index * 8
+
+            if (entry + 4 > bytes.size) {
+                break
+            }
 
             val offset =
                 readUInt32(
@@ -149,44 +133,46 @@ object MobiReader {
                     entry
                 )
 
-            val nextOffset =
-                if (
-                    index + 1 <
-                    recordCount
-                ) {
-
-                    readUInt32(
-                        bytes,
-                        entry + 8
-                    )
-
-                } else {
-
-                    bytes.size
-                }
-
             if (
                 offset < 0 ||
                 offset >= bytes.size
             ) {
+                break
+            }
+
+            offsets.add(offset)
+        }
+
+        val records =
+            mutableListOf<ByteArray>()
+
+        for (index in offsets.indices) {
+
+            val start =
+                offsets[index]
+
+            val end =
+                if (
+                    index + 1 <
+                    offsets.size
+                ) {
+                    offsets[index + 1]
+                } else {
+                    bytes.size
+                }
+
+            if (
+                start < 0 ||
+                end <= start ||
+                end > bytes.size
+            ) {
                 continue
             }
 
-            val end =
-                when {
-
-                    nextOffset > offset &&
-                    nextOffset <= bytes.size ->
-                        nextOffset
-
-                    else ->
-                        bytes.size
-                }
-
             records.add(
-                PalmRecord(
-                    offset = offset,
-                    length = end - offset
+                bytes.copyOfRange(
+                    start,
+                    end
                 )
             )
         }
@@ -195,45 +181,84 @@ object MobiReader {
     }
 
     private fun findMobiHeader(
-        bytes: ByteArray,
-        records: List<PalmRecord>
+        records: List<ByteArray>
     ): MobiHeader? {
 
-        for (record in records) {
+        for (
+            record in records
+        ) {
 
-            if (record.length < 20) {
-                continue
-            }
+            val index =
+                indexOfAscii(
+                    record,
+                    "MOBI"
+                )
 
-            val start =
-                record.offset
-
-            val end =
-                record.offset +
-                    record.length -
-                    4
-
-            for (
-                position in start..end
+            if (
+                index >= 0 &&
+                index + 8 <= record.size
             ) {
 
+                val headerLength =
+                    readUInt32(
+                        record,
+                        index + 4
+                    )
+
                 if (
-                    bytes[position] == 'M'.code.toByte() &&
-                    bytes[position + 1] == 'O'.code.toByte() &&
-                    bytes[position + 2] == 'B'.code.toByte() &&
-                    bytes[position + 3] == 'I'.code.toByte()
+                    headerLength >= 232 &&
+                    index + headerLength <=
+                    record.size
                 ) {
 
-                    if (
-                        position + 68 >
-                        bytes.size
-                    ) {
-                        continue
-                    }
+                    val type =
+                        readUInt32(
+                            record,
+                            index + 16
+                        )
 
-                    return parseMobiHeader(
-                        bytes,
-                        position
+                    val textEncoding =
+                        readUInt32(
+                            record,
+                            index + 28
+                        )
+
+                    val uniqueId =
+                        readUInt32(
+                            record,
+                            index + 32
+                        )
+
+                    val firstNonBookIndex =
+                        readUInt32(
+                            record,
+                            index + 80
+                        )
+
+                    val compression =
+                        if (
+                            index >= 16
+                        ) {
+                            readUInt16(
+                                record,
+                                index - 16
+                            )
+                        } else {
+                            0
+                        }
+
+                    return MobiHeader(
+                        offset = index,
+                        length =
+                            headerLength,
+                        type = type,
+                        textEncoding =
+                            textEncoding,
+                        uniqueId = uniqueId,
+                        firstNonBookIndex =
+                            firstNonBookIndex,
+                        compression =
+                            compression
                     )
                 }
             }
@@ -242,347 +267,126 @@ object MobiReader {
         return null
     }
 
-    private fun parseMobiHeader(
-        bytes: ByteArray,
-        mobiOffset: Int
-    ): MobiHeader {
+    private fun extractTextRecords(
+        records: List<ByteArray>,
+        header: MobiHeader?
+    ): List<ByteArray> {
 
-        val length =
-            readUInt32(
-                bytes,
-                mobiOffset + 4
-            )
+        if (records.size <= 1) {
+            return emptyList()
+        }
 
-        val type =
-            readUInt32(
-                bytes,
-                mobiOffset + 8
-            )
+        val startIndex = 1
 
-        val textEncoding =
-            readUInt32(
-                bytes,
-                mobiOffset + 28
-            )
-
-        val uniqueId =
-            readUInt32(
-                bytes,
-                mobiOffset + 32
-            )
-
-        val firstNonBookIndex =
-            readUInt32(
-                bytes,
-                mobiOffset + 80
-            )
-
-        val compression =
+        val endIndex =
             if (
-                mobiOffset >= 16
+                header != null &&
+                header.firstNonBookIndex > 0
             ) {
 
-                readUInt16(
-                    bytes,
-                    mobiOffset - 16
+                minOf(
+                    records.size,
+                    header.firstNonBookIndex
                 )
 
             } else {
-
-                0
+                records.size
             }
 
-        return MobiHeader(
-            offset = mobiOffset,
-            length = length,
-            type = type,
-            textEncoding = textEncoding,
-            uniqueId = uniqueId,
-            firstNonBookIndex = firstNonBookIndex,
-            compression = compression
-        )
-    }
-
-    private fun extractBookText(
-        bytes: ByteArray,
-        records: List<PalmRecord>,
-        mobiHeader: MobiHeader
-    ): String {
-
-        if (records.size <= 1) {
-            return ""
-        }
-
-        val output =
-            ByteArrayOutputStream()
-
-        val firstTextRecord =
-            1
-
-        val lastTextRecord =
-            when {
-
-                mobiHeader.firstNonBookIndex > 0 &&
-                mobiHeader.firstNonBookIndex <= records.size ->
-                    mobiHeader.firstNonBookIndex - 1
-
-                else ->
-                    minOf(
-                        records.size - 1,
-                        firstTextRecord + 5000
-                    )
-            }
+        val result =
+            mutableListOf<ByteArray>()
 
         for (
-            index in firstTextRecord..lastTextRecord
+            index in startIndex until endIndex
         ) {
-
-            if (
-                index >= records.size
-            ) {
-                break
-            }
 
             val record =
                 records[index]
 
-            if (
-                record.offset < 0 ||
-                record.offset >= bytes.size
-            ) {
+            if (record.isEmpty()) {
                 continue
             }
 
-            val end =
-                minOf(
-                    bytes.size,
-                    record.offset +
-                        record.length
-                )
-
-            if (
-                end <= record.offset
-            ) {
-                continue
-            }
-
-            val recordBytes =
-                bytes.copyOfRange(
-                    record.offset,
-                    end
-                )
-
-            val decoded =
-                when (
-                    mobiHeader.compression
+            val data =
+                if (
+                    header != null &&
+                    header.compression == 2
                 ) {
 
-                    2 ->
-                        PalmDocDecompressor
-                            .decompress(
-                                recordBytes
-                            )
-
-                    else ->
-                        recordBytes
-                }
-
-            output.write(
-                decoded
-            )
-        }
-
-        return decodeText(
-            output.toByteArray(),
-            mobiHeader.textEncoding
-        )
-            .replace("\u0000", "")
-            .trim()
-    }
-
-    private fun detectTitle(
-        bytes: ByteArray,
-        records: List<PalmRecord>,
-        mobiHeader: MobiHeader
-    ): String? {
-
-        if (
-            records.isEmpty()
-        ) {
-            return null
-        }
-
-        val firstRecord =
-            records.firstOrNull()
-                ?: return null
-
-        val start =
-            firstRecord.offset
-
-        val end =
-            minOf(
-                bytes.size,
-                start + firstRecord.length
-            )
-
-        if (
-            end <= start
-        ) {
-            return null
-        }
-
-        val sample =
-            bytes.copyOfRange(
-                start,
-                end
-            )
-
-        val text =
-            decodeText(
-                sample,
-                mobiHeader.textEncoding
-            )
-
-        return text
-            .lineSequence()
-            .map { it.trim() }
-            .firstOrNull {
-                it.length in 2..200 &&
-                    it.none {
-                        char ->
-                        char.code < 32 &&
-                            char != '\t'
-                    }
-            }
-    }
-
-    private fun splitIntoChapters(
-        text: String
-    ): List<ReaderChapter> {
-
-        val cleanText =
-            text
-                .replace("\r\n", "\n")
-                .replace("\r", "\n")
-                .trim()
-
-        if (cleanText.isBlank()) {
-            return emptyList()
-        }
-
-        val paragraphs =
-            cleanText
-                .split(
-                    Regex(
-                        "\\n\\s*\\n"
+                    PalmDocDecompressor.decompress(
+                        record
                     )
-                )
-                .map {
-                    it.trim()
-                }
-                .filter {
-                    it.isNotBlank()
+
+                } else {
+
+                    record
                 }
 
-        if (paragraphs.isEmpty()) {
-            return listOf(
-                ReaderChapter(
-                    title = "Chapter 1",
-                    content = cleanText
-                )
-            )
-        }
-
-        val chapters =
-            mutableListOf<ReaderChapter>()
-
-        val builder =
-            StringBuilder()
-
-        var chapterNumber =
-            1
-
-        for (paragraph in paragraphs) {
-
-            if (
-                builder.isNotEmpty() &&
-                builder.length +
-                paragraph.length >
-                12000
-            ) {
-
-                chapters.add(
-                    ReaderChapter(
-                        title =
-                            "Chapter $chapterNumber",
-                        content =
-                            builder
-                                .toString()
-                                .trim()
-                    )
-                )
-
-                chapterNumber++
-
-                builder.clear()
+            if (data.isNotEmpty()) {
+                result.add(data)
             }
-
-            if (builder.isNotEmpty()) {
-                builder.append(
-                    "\n\n"
-                )
-            }
-
-            builder.append(
-                paragraph
-            )
         }
 
-        if (
-            builder.isNotEmpty()
-        ) {
-
-            chapters.add(
-                ReaderChapter(
-                    title =
-                        "Chapter $chapterNumber",
-                    content =
-                        builder
-                            .toString()
-                            .trim()
-                )
-            )
-        }
-
-        return chapters
+        return result
     }
 
     private fun decodeText(
-        bytes: ByteArray,
+        records: List<ByteArray>,
         encoding: Int
     ): String {
 
-        val charset =
-            when (encoding) {
+        val output =
+            ByteArrayOutputStream()
 
-                65001 ->
-                    StandardCharsets.UTF_8
+        for (
+            record in records
+        ) {
 
-                1252 ->
-                    Charset.forName(
-                        "windows-1252"
-                    )
+            output.write(
+                record
+            )
 
-                0 ->
-                    Charset.forName(
-                        "windows-1252"
-                    )
+            output.write(
+                '\n'.code
+            )
+        }
 
-                else ->
-                    Charset.forName(
-                        "windows-1252"
-                    )
+        val bytes =
+            output.toByteArray()
+
+        return when (encoding) {
+
+            65001 -> {
+                decodeSafely(
+                    bytes,
+                    Charsets.UTF_8
+                )
             }
+
+            1252,
+            1250,
+            1251 -> {
+                decodeSafely(
+                    bytes,
+                    Charset.forName(
+                        "windows-$encoding"
+                    )
+                )
+            }
+
+            else -> {
+                decodeSafely(
+                    bytes,
+                    Charsets.UTF_8
+                )
+            }
+        }
+    }
+
+    private fun decodeSafely(
+        bytes: ByteArray,
+        charset: Charset
+    ): String {
 
         return try {
 
@@ -592,14 +396,213 @@ object MobiReader {
             )
 
         } catch (
-            _: Exception
+            exception: Exception
         ) {
 
             String(
                 bytes,
-                StandardCharsets.UTF_8
+                Charsets.UTF_8
             )
         }
+    }
+
+    private fun createChapters(
+        text: String
+    ): List<ReaderChapter> {
+
+        val cleaned =
+            cleanMobiText(
+                text
+            )
+
+        if (cleaned.isBlank()) {
+            return emptyList()
+        }
+
+        val chapterSize =
+            12_000
+
+        val chapters =
+            mutableListOf<ReaderChapter>()
+
+        var position = 0
+        var chapterNumber = 1
+
+        while (
+            position < cleaned.length
+        ) {
+
+            val end =
+                minOf(
+                    position + chapterSize,
+                    cleaned.length
+                )
+
+            var actualEnd = end
+
+            if (
+                end < cleaned.length
+            ) {
+
+                val newline =
+                    cleaned.lastIndexOf(
+                        '\n',
+                        end
+                    )
+
+                if (
+                    newline > position + 2_000
+                ) {
+                    actualEnd =
+                        newline
+                }
+            }
+
+            val chapterText =
+                cleaned.substring(
+                    position,
+                    actualEnd
+                ).trim()
+
+            if (chapterText.isNotBlank()) {
+
+                chapters.add(
+                    ReaderChapter(
+                        title =
+                            "Chapter $chapterNumber",
+
+                        content =
+                            chapterText
+                    )
+                )
+
+                chapterNumber++
+            }
+
+            position =
+                if (actualEnd <= position) {
+                    end
+                } else {
+                    actualEnd
+                }
+        }
+
+        return chapters
+    }
+
+    private fun cleanMobiText(
+        text: String
+    ): String {
+
+        return text
+            .replace(
+                "\u0000",
+                ""
+            )
+            .replace(
+                "\r\n",
+                "\n"
+            )
+            .replace(
+                '\r',
+                '\n'
+            )
+            .replace(
+                Regex(
+                    "[ \\t]+"
+                ),
+                " "
+            )
+            .replace(
+                Regex(
+                    "\n{3,}"
+                ),
+                "\n\n"
+            )
+            .trim()
+    }
+
+    private fun getDocumentName(
+        context: Context,
+        uri: Uri
+    ): String {
+
+        var name =
+            "MOBI Document"
+
+        context.contentResolver
+            .query(
+                uri,
+                arrayOf(
+                    android.provider.OpenableColumns.DISPLAY_NAME
+                ),
+                null,
+                null,
+                null
+            )
+            ?.use { cursor ->
+
+                if (cursor.moveToFirst()) {
+
+                    val index =
+                        cursor.getColumnIndex(
+                            android.provider.OpenableColumns.DISPLAY_NAME
+                        )
+
+                    if (index >= 0) {
+
+                        name =
+                            cursor.getString(
+                                index
+                            )
+                    }
+                }
+            }
+
+        return name
+            .substringBeforeLast(
+                '.',
+                name
+            )
+    }
+
+    private fun indexOfAscii(
+        bytes: ByteArray,
+        value: String
+    ): Int {
+
+        val target =
+            value.toByteArray(
+                Charsets.US_ASCII
+            )
+
+        if (
+            target.isEmpty() ||
+            target.size > bytes.size
+        ) {
+            return -1
+        }
+
+        outer@ for (
+            index in 0..bytes.size - target.size
+        ) {
+
+            for (
+                offset in target.indices
+            ) {
+
+                if (
+                    bytes[index + offset] !=
+                    target[offset]
+                ) {
+                    continue@outer
+                }
+            }
+
+            return index
+        }
+
+        return -1
     }
 
     private fun readUInt16(
@@ -609,16 +612,17 @@ object MobiReader {
 
         if (
             offset < 0 ||
-            offset + 2 >
-            bytes.size
+            offset + 2 > bytes.size
         ) {
             return 0
         }
 
         return (
-            ((bytes[offset].toInt() and 0xFF) shl 8) or
-            (bytes[offset + 1].toInt() and 0xFF)
-        )
+            (bytes[offset].toInt() and 0xFF) shl 8
+        ) or
+            (
+                bytes[offset + 1].toInt() and 0xFF
+            )
     }
 
     private fun readUInt32(
@@ -628,17 +632,32 @@ object MobiReader {
 
         if (
             offset < 0 ||
-            offset + 4 >
-            bytes.size
+            offset + 4 > bytes.size
         ) {
             return 0
         }
 
         return (
-            ((bytes[offset].toInt() and 0xFF) shl 24) or
-            ((bytes[offset + 1].toInt() and 0xFF) shl 16) or
-            ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
-            (bytes[offset + 3].toInt() and 0xFF)
-        )
+            (bytes[offset].toInt() and 0xFF) shl 24
+        ) or
+            (
+                (bytes[offset + 1].toInt() and 0xFF) shl 16
+            ) or
+            (
+                (bytes[offset + 2].toInt() and 0xFF) shl 8
+            ) or
+            (
+                bytes[offset + 3].toInt() and 0xFF
+            )
     }
+
+    private data class MobiHeader(
+        val offset: Int,
+        val length: Int,
+        val type: Int,
+        val textEncoding: Int,
+        val uniqueId: Int,
+        val firstNonBookIndex: Int,
+        val compression: Int
+    )
 }
