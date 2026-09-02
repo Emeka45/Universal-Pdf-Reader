@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -34,9 +33,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import kotlin.math.max
 import kotlin.math.min
 
@@ -45,6 +45,9 @@ fun ComicReaderScreen(
     pages: List<ComicPage>,
     documentUri: String
 ) {
+
+    val context =
+        LocalContext.current
 
     var currentPage by remember {
         mutableIntStateOf(0)
@@ -63,30 +66,50 @@ fun ComicReaderScreen(
         pages.size
     ) {
 
-        val saved =
+        val savedPosition =
             ComicReadingPositionRepository.get(
-                context =
-                    androidx.compose.ui.platform
-                        .LocalContext
-                        .current,
-
-                documentUri =
-                    documentUri
+                context = context,
+                documentUri = documentUri
             )
 
-        if (saved != null) {
+        if (
+            savedPosition != null &&
+            pages.isNotEmpty()
+        ) {
 
             currentPage =
-                saved.pageIndex.coerceIn(
+                savedPosition.pageIndex.coerceIn(
                     0,
-                    max(
-                        0,
-                        pages.lastIndex
-                    )
+                    pages.lastIndex
                 )
         }
 
         positionLoaded = 1
+    }
+
+    LaunchedEffect(
+        currentPage,
+        documentUri
+    ) {
+
+        if (
+            positionLoaded == 1 &&
+            pages.isNotEmpty()
+        ) {
+
+            ComicReadingPositionRepository.save(
+                context = context,
+
+                position =
+                    ComicReadingPosition(
+                        documentUri =
+                            documentUri,
+
+                        pageIndex =
+                            currentPage
+                    )
+            )
+        }
     }
 
     if (pages.isEmpty()) {
@@ -146,11 +169,6 @@ fun ComicReaderScreen(
             )
         }
 
-    val context =
-        androidx.compose.ui.platform
-            .LocalContext
-            .current
-
     Column(
         modifier =
             Modifier
@@ -185,18 +203,6 @@ fun ComicReaderScreen(
                         currentPage--
 
                         zoom = 1f
-
-                        ComicReadingPositionRepository.save(
-                            context,
-
-                            ComicReadingPosition(
-                                documentUri =
-                                    documentUri,
-
-                                pageIndex =
-                                    currentPage
-                            )
-                        )
                     }
                 }
             ) {
@@ -231,18 +237,6 @@ fun ComicReaderScreen(
                         currentPage++
 
                         zoom = 1f
-
-                        ComicReadingPositionRepository.save(
-                            context,
-
-                            ComicReadingPosition(
-                                documentUri =
-                                    documentUri,
-
-                                pageIndex =
-                                    currentPage
-                            )
-                        )
                     }
                 }
             ) {
@@ -353,40 +347,37 @@ fun ComicReaderScreen(
 
         } else {
 
-            LazyColumn(
+            Box(
                 modifier =
                     Modifier.fillMaxSize()
             ) {
 
-                item {
+                Image(
+                    bitmap =
+                        bitmap.asImageBitmap(),
 
-                    Image(
-                        bitmap =
-                            bitmap.asImageBitmap(),
+                    contentDescription =
+                        page.name,
 
-                        contentDescription =
-                            page.name,
+                    contentScale =
+                        ContentScale.FillWidth,
 
-                        contentScale =
-                            ContentScale.FillWidth,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(
+                                min = 200.dp
+                            )
+                            .scale(zoom)
+                            .pointerInput(
+                                zoom
+                            ) {
 
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(
-                                    min = 200.dp
-                                )
-                                .scale(zoom)
-                                .pointerInput(
-                                    zoom
-                                ) {
-
-                                    detectTransformGestures {
-                                        _, _, _, _ ->
-                                    }
+                                detectTransformGestures {
+                                    _, _, _, _ ->
                                 }
-                    )
-                }
+                            }
+                )
             }
         }
     }
