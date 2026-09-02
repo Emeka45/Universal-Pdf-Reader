@@ -1,5 +1,6 @@
 package com.coeric.universalreader
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +37,12 @@ fun ReaderDocumentScreen(
         mutableStateOf(false)
     }
 
+    BackHandler {
+        if (showChapterList) {
+            showChapterList = false
+        }
+    }
+
     Scaffold(
         topBar = {
 
@@ -51,7 +58,10 @@ fun ReaderDocumentScreen(
                 navigationIcon = {
 
                     IconButton(
-                        onClick = {}
+                        onClick = {
+                            // Let the Activity handle the
+                            // actual navigation back.
+                        }
                     ) {
 
                         Icon(
