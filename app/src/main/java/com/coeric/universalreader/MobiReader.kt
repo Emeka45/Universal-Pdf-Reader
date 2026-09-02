@@ -5,9 +5,6 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-import java.io.InputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.nio.charset.Charset
 
 object MobiReader : ReaderEngine {
@@ -67,14 +64,6 @@ object MobiReader : ReaderEngine {
         val firstRecord =
             records.first()
 
-        if (
-            firstRecord.size < 16
-        ) {
-            throw IllegalStateException(
-                "Invalid MOBI record."
-            )
-        }
-
         val mobiOffset =
             findMobiHeader(
                 firstRecord
@@ -125,6 +114,13 @@ object MobiReader : ReaderEngine {
                 text
             )
 
+        if (chapters.isEmpty()) {
+
+            throw IllegalStateException(
+                "No readable chapters were found."
+            )
+        }
+
         return ReaderDocument(
             title =
                 title
@@ -132,8 +128,10 @@ object MobiReader : ReaderEngine {
                         it.isNotBlank()
                     }
                     ?: "Untitled",
+
             author =
                 author,
+
             chapters =
                 chapters
         )
@@ -170,9 +168,15 @@ object MobiReader : ReaderEngine {
                     offset
                 ).toInt()
 
-            recordOffsets.add(
-                recordOffset
-            )
+            if (
+                recordOffset >= 0 &&
+                recordOffset < data.size
+            ) {
+
+                recordOffsets.add(
+                    recordOffset
+                )
+            }
 
             offset += 8
         }
@@ -189,8 +193,13 @@ object MobiReader : ReaderEngine {
                     index + 1 <
                     recordOffsets.size
                 ) {
-                    recordOffsets[index + 1]
+
+                    recordOffsets[
+                        index + 1
+                    ]
+
                 } else {
+
                     data.size
                 }
 
@@ -230,6 +239,12 @@ object MobiReader : ReaderEngine {
                 'I'.code.toByte()
             )
 
+        if (
+            record.size < 4
+        ) {
+            return -1
+        }
+
         for (
             index in 0..record.size - 4
         ) {
@@ -237,13 +252,17 @@ object MobiReader : ReaderEngine {
             if (
                 record[index] ==
                 signature[0] &&
+
                 record[index + 1] ==
                 signature[1] &&
+
                 record[index + 2] ==
                 signature[2] &&
+
                 record[index + 3] ==
                 signature[3]
             ) {
+
                 return index
             }
         }
@@ -257,7 +276,7 @@ object MobiReader : ReaderEngine {
     ): MobiHeader {
 
         if (
-            mobiOffset + 20 >
+            mobiOffset + 84 >
             record.size
         ) {
 
@@ -296,19 +315,33 @@ object MobiReader : ReaderEngine {
                 mobiOffset + 80
             ).toInt()
 
+        val compression =
+            readUInt16(
+                record,
+                mobiOffset - 16
+            )
+
         return MobiHeader(
             offset =
                 mobiOffset,
+
             length =
                 headerLength,
+
             type =
                 type,
+
             textEncoding =
                 textEncoding,
+
             uniqueId =
                 uniqueId,
+
             firstNonBookIndex =
-                firstNonBookIndex
+                firstNonBookIndex,
+
+            compression =
+                compression
         )
     }
 
@@ -317,13 +350,6 @@ object MobiReader : ReaderEngine {
         mobiOffset: Int,
         header: MobiHeader
     ): String {
-
-        /*
-         * The EXTH metadata block is located after
-         * the MOBI header for normal MOBI files.
-         *
-         * We first try to read the EXTH title record.
-         */
 
         val exth =
             findExthHeader(
@@ -340,6 +366,7 @@ object MobiReader : ReaderEngine {
             if (
                 !title.isNullOrBlank()
             ) {
+
                 return decodeString(
                     title,
                     header.textEncoding
@@ -369,6 +396,7 @@ object MobiReader : ReaderEngine {
 
         return author
             ?.let {
+
                 decodeString(
                     it,
                     header.textEncoding
@@ -385,7 +413,7 @@ object MobiReader : ReaderEngine {
         header: MobiHeader
     ): ExthHeader? {
 
-        val exthSignature =
+        val signature =
             byteArrayOf(
                 'E'.code.toByte(),
                 'X'.code.toByte(),
@@ -403,20 +431,30 @@ object MobiReader : ReaderEngine {
                     mobiOffset
                 )
 
+        if (
+            searchStart >=
+            record.size - 4
+        ) {
+            return null
+        }
+
         for (
             index in searchStart until
-                (record.size - 4)
+                record.size - 4
         ) {
 
             if (
                 record[index] ==
-                exthSignature[0] &&
+                signature[0] &&
+
                 record[index + 1] ==
-                exthSignature[1] &&
+                signature[1] &&
+
                 record[index + 2] ==
-                exthSignature[2] &&
+                signature[2] &&
+
                 record[index + 3] ==
-                exthSignature[3]
+                signature[3]
             ) {
 
                 return parseExth(
@@ -499,7 +537,8 @@ object MobiReader : ReaderEngine {
         }
 
         return ExthHeader(
-            records = values
+            records =
+                values
         )
     }
 
@@ -515,11 +554,10 @@ object MobiReader : ReaderEngine {
         }
 
         val textRecords =
-            records
-                .drop(1)
+            records.drop(1)
 
         val output =
-            ByteArrayOutputStream()
+            StringBuilder()
 
         for (
             record in textRecords
@@ -531,32 +569,52 @@ object MobiReader : ReaderEngine {
                 continue
             }
 
-            val decoded =
+            val decodedRecord =
+                when (
+                    header.compression
+                ) {
+
+                    1 -> {
+
+                        record
+                    }
+
+                    2 -> {
+
+                        PalmDocDecompressor
+                            .decompress(
+                                record
+                            )
+                    }
+
+                    else -> {
+
+                        record
+                    }
+                }
+
+            val text =
                 decodeTextRecord(
-                    record,
+                    decodedRecord,
                     header.textEncoding
                 )
 
             if (
-                decoded.isNotBlank()
+                text.isNotBlank()
             ) {
 
-                output.write(
-                    decoded.toByteArray(
-                        Charsets.UTF_8
+                output
+                    .append(
+                        text
                     )
-                )
-
-                output.write(
-                    "\n".toByteArray()
-                )
+                    .append(
+                        "\n"
+                    )
             }
         }
 
         return output
-            .toString(
-                Charsets.UTF_8.name()
-            )
+            .toString()
             .trim()
     }
 
@@ -565,26 +623,8 @@ object MobiReader : ReaderEngine {
         encoding: Int
     ): String {
 
-        /*
-         * MOBI normally uses:
-         *
-         * 1252 = Windows-1252
-         * 65001 = UTF-8
-         *
-         * Some files contain additional compression
-         * such as PalmDOC compression. That is handled
-         * separately below.
-         */
-
-        val cleaned =
-            record
-                .takeWhile {
-                    it != 0.toByte()
-                }
-                .toByteArray()
-
         if (
-            cleaned.isEmpty()
+            record.isEmpty()
         ) {
             return ""
         }
@@ -596,7 +636,7 @@ object MobiReader : ReaderEngine {
                 65001 -> {
 
                     String(
-                        cleaned,
+                        record,
                         Charsets.UTF_8
                     )
                 }
@@ -604,7 +644,7 @@ object MobiReader : ReaderEngine {
                 else -> {
 
                     String(
-                        cleaned,
+                        record,
                         Charset.forName(
                             "windows-1252"
                         )
@@ -617,7 +657,7 @@ object MobiReader : ReaderEngine {
         ) {
 
             String(
-                cleaned,
+                record,
                 Charsets.UTF_8
             )
         }
@@ -703,6 +743,7 @@ object MobiReader : ReaderEngine {
                     ReaderChapter(
                         title =
                             "Chapter $chapterNumber",
+
                         content =
                             current
                                 .toString()
@@ -724,6 +765,7 @@ object MobiReader : ReaderEngine {
                 ReaderChapter(
                     title =
                         "Chapter $chapterNumber",
+
                     content =
                         current
                             .toString()
@@ -772,6 +814,31 @@ object MobiReader : ReaderEngine {
         }
     }
 
+    private fun readUInt16(
+        data: ByteArray,
+        offset: Int
+    ): Int {
+
+        if (
+            offset < 0 ||
+            offset + 2 >
+            data.size
+        ) {
+            return 0
+        }
+
+        return (
+            (
+                data[offset]
+                    .toInt() and 0xFF
+            ) shl 8
+        ) or
+            (
+                data[offset + 1]
+                    .toInt() and 0xFF
+            )
+    }
+
     private fun readUInt32(
         data: ByteArray,
         offset: Int
@@ -786,13 +853,26 @@ object MobiReader : ReaderEngine {
         }
 
         return (
-            (data[offset].toLong() and 0xFF) shl 24
-                or
-                ((data[offset + 1].toLong() and 0xFF) shl 16)
-                or
-                ((data[offset + 2].toLong() and 0xFF) shl 8)
-                or
-                (data[offset + 3].toLong() and 0xFF)
+            (
+                data[offset]
+                    .toLong() and 0xFF
+            ) shl 24
+        ) or
+            (
+                (
+                    data[offset + 1]
+                        .toLong() and 0xFF
+                ) shl 16
+            ) or
+            (
+                (
+                    data[offset + 2]
+                        .toLong() and 0xFF
+                ) shl 8
+            ) or
+            (
+                data[offset + 3]
+                    .toLong() and 0xFF
             )
     }
 
@@ -848,20 +928,22 @@ object MobiReader : ReaderEngine {
 
                 val recordCount =
                     (
-                        (data[
-                            recordCountOffset
-                        ].toInt() and 0xFF) shl 8
-                            or
-                            (
-                                data[
-                                    recordCountOffset + 1
-                                ].toInt() and 0xFF
-                            )
+                        (
+                            data[
+                                recordCountOffset
+                            ].toInt() and 0xFF
+                        ) shl 8
+                    ) or
+                        (
+                            data[
+                                recordCountOffset + 1
+                            ].toInt() and 0xFF
                         )
 
                 return PalmDatabaseHeader(
                     recordListOffset =
                         recordListOffset + 8,
+
                     recordCount =
                         recordCount
                 )
@@ -873,13 +955,26 @@ object MobiReader : ReaderEngine {
             ): Long {
 
                 return (
-                    (data[offset].toLong() and 0xFF) shl 24
-                        or
-                        ((data[offset + 1].toLong() and 0xFF) shl 16)
-                        or
-                        ((data[offset + 2].toLong() and 0xFF) shl 8)
-                        or
-                        (data[offset + 3].toLong() and 0xFF)
+                    (
+                        data[offset]
+                            .toLong() and 0xFF
+                    ) shl 24
+                ) or
+                    (
+                        (
+                            data[offset + 1]
+                                .toLong() and 0xFF
+                        ) shl 16
+                    ) or
+                    (
+                        (
+                            data[offset + 2]
+                                .toLong() and 0xFF
+                        ) shl 8
+                    ) or
+                    (
+                        data[offset + 3]
+                            .toLong() and 0xFF
                     )
             }
         }
@@ -891,7 +986,8 @@ object MobiReader : ReaderEngine {
         val type: Int,
         val textEncoding: Int,
         val uniqueId: Int,
-        val firstNonBookIndex: Int
+        val firstNonBookIndex: Int,
+        val compression: Int
     )
 
     private data class ExthHeader(
