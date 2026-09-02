@@ -48,6 +48,12 @@ object ReaderFormatRouter {
                     uri
                 )
 
+            DocumentFormat.DOC ->
+                DocReader.open(
+                    context,
+                    uri
+                )
+
             DocumentFormat.DOCX ->
                 DocxReader.open(
                     context,
