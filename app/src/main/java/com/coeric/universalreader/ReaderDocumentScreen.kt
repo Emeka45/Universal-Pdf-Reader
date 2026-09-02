@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -370,6 +371,7 @@ fun ReaderDocumentScreen(
 
                     onDelete = {
                         bookmark ->
+
                         BookmarkRepository.removeBookmark(
                             context,
                             bookmark.id
@@ -396,6 +398,7 @@ fun ReaderDocumentScreen(
 
                     onDelete = {
                         highlight ->
+
                         HighlightRepository.removeHighlight(
                             context,
                             highlight.id
@@ -428,6 +431,14 @@ fun ReaderDocumentScreen(
 
                     settings =
                         settings,
+
+                    onHighlightAdded = {
+                        highlights =
+                            HighlightRepository.getHighlights(
+                                context,
+                                documentUri
+                            )
+                    },
 
                     modifier =
                         Modifier.padding(
@@ -828,6 +839,7 @@ private fun DocumentContent(
     selectedChapter: Int,
     documentUri: String,
     settings: ReaderSettings,
+    onHighlightAdded: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context =
@@ -1034,19 +1046,21 @@ private fun DocumentContent(
                     }
                 }
 
-                Text(
-                    text =
-                        chapter.content,
+                SelectionContainer {
+                    Text(
+                        text =
+                            chapter.content,
 
-                    style =
-                        textStyle,
+                        style =
+                            textStyle,
 
-                    modifier =
-                        Modifier.padding(
-                            top = 10.dp,
-                            bottom = 10.dp
-                        )
-                )
+                        modifier =
+                            Modifier.padding(
+                                top = 10.dp,
+                                bottom = 10.dp
+                            )
+                    )
+                }
             }
         }
     }
