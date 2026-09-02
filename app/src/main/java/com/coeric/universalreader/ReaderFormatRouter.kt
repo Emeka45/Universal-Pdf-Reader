@@ -60,17 +60,21 @@ object ReaderFormatRouter {
                     uri
                 )
 
-            DocumentFormat.CBZ -> {
+            DocumentFormat.MARKDOWN ->
+                MarkdownReader.open(
+                    context,
+                    uri
+                )
+
+            DocumentFormat.CBZ ->
                 throw UnsupportedOperationException(
                     "CBZ uses the comic reader."
                 )
-            }
 
-            DocumentFormat.CBR -> {
+            DocumentFormat.CBR ->
                 throw UnsupportedOperationException(
                     "CBR/RAR reading is not implemented yet."
                 )
-            }
 
             else ->
                 throw UnsupportedOperationException(
