@@ -3,18 +3,17 @@ package com.coeric.universalreader
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ZoomIn
@@ -37,14 +36,14 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlin.math.max
 import kotlin.math.min
 
 @Composable
 fun ComicReaderScreen(
-    pages: List<ComicPage>
+    pages: List<ComicPage>,
+    documentUri: String
 ) {
 
     var currentPage by remember {
@@ -55,28 +54,39 @@ fun ComicReaderScreen(
         mutableFloatStateOf(1f)
     }
 
-    val safePage =
-        if (pages.isEmpty()) {
-            0
-        } else {
-            currentPage.coerceIn(
-                0,
-                pages.lastIndex
-            )
-        }
+    var positionLoaded by remember {
+        mutableIntStateOf(0)
+    }
 
     LaunchedEffect(
+        documentUri,
         pages.size
     ) {
 
-        if (pages.isNotEmpty()) {
+        val saved =
+            ComicReadingPositionRepository.get(
+                context =
+                    androidx.compose.ui.platform
+                        .LocalContext
+                        .current,
+
+                documentUri =
+                    documentUri
+            )
+
+        if (saved != null) {
 
             currentPage =
-                currentPage.coerceIn(
+                saved.pageIndex.coerceIn(
                     0,
-                    pages.lastIndex
+                    max(
+                        0,
+                        pages.lastIndex
+                    )
                 )
         }
+
+        positionLoaded = 1
     }
 
     if (pages.isEmpty()) {
@@ -98,16 +108,48 @@ fun ComicReaderScreen(
         return
     }
 
+    if (positionLoaded == 0) {
+
+        Box(
+            modifier =
+                Modifier.fillMaxSize(),
+
+            contentAlignment =
+                Alignment.Center
+        ) {
+
+            Text(
+                text =
+                    "Loading comic..."
+            )
+        }
+
+        return
+    }
+
+    val safePage =
+        currentPage.coerceIn(
+            0,
+            pages.lastIndex
+        )
+
     val page =
         pages[safePage]
 
     val bitmap =
-        remember(page.file.absolutePath) {
+        remember(
+            page.file.absolutePath
+        ) {
 
             BitmapFactory.decodeFile(
                 page.file.absolutePath
             )
         }
+
+    val context =
+        androidx.compose.ui.platform
+            .LocalContext
+            .current
 
     Column(
         modifier =
@@ -137,9 +179,24 @@ fun ComicReaderScreen(
 
             IconButton(
                 onClick = {
+
                     if (safePage > 0) {
+
                         currentPage--
+
                         zoom = 1f
+
+                        ComicReadingPositionRepository.save(
+                            context,
+
+                            ComicReadingPosition(
+                                documentUri =
+                                    documentUri,
+
+                                pageIndex =
+                                    currentPage
+                            )
+                        )
                     }
                 }
             ) {
@@ -165,12 +222,27 @@ fun ComicReaderScreen(
 
             IconButton(
                 onClick = {
+
                     if (
                         safePage <
                         pages.lastIndex
                     ) {
+
                         currentPage++
+
                         zoom = 1f
+
+                        ComicReadingPositionRepository.save(
+                            context,
+
+                            ComicReadingPosition(
+                                documentUri =
+                                    documentUri,
+
+                                pageIndex =
+                                    currentPage
+                            )
+                        )
                     }
                 }
             ) {
@@ -187,6 +259,7 @@ fun ComicReaderScreen(
 
         LinearProgressIndicator(
             progress = {
+
                 (
                     (safePage + 1).toFloat() /
                         pages.size.toFloat()
@@ -218,6 +291,7 @@ fun ComicReaderScreen(
 
             IconButton(
                 onClick = {
+
                     zoom =
                         max(
                             1f,
@@ -242,6 +316,7 @@ fun ComicReaderScreen(
 
             IconButton(
                 onClick = {
+
                     zoom =
                         min(
                             4f,
@@ -278,68 +353,40 @@ fun ComicReaderScreen(
 
         } else {
 
-            ComicPageImage(
-                bitmap =
-                    bitmap,
+            LazyColumn(
+                modifier =
+                    Modifier.fillMaxSize()
+            ) {
 
-                zoom =
-                    zoom
-            )
-        }
-    }
-}
+                item {
 
-@Composable
-private fun ComicPageImage(
-    bitmap: android.graphics.Bitmap,
-    zoom: Float
-) {
+                    Image(
+                        bitmap =
+                            bitmap.asImageBitmap(),
 
-    Box(
-        modifier =
-            Modifier.fillMaxSize()
-    ) {
+                        contentDescription =
+                            page.name,
 
-        LazyColumn(
-            modifier =
-                Modifier.fillMaxSize()
-        ) {
+                        contentScale =
+                            ContentScale.FillWidth,
 
-            item {
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(
+                                    min = 200.dp
+                                )
+                                .scale(zoom)
+                                .pointerInput(
+                                    zoom
+                                ) {
 
-                Image(
-                    bitmap =
-                        bitmap.asImageBitmap(),
-
-                    contentDescription =
-                        null,
-
-                    contentScale =
-                        ContentScale.FillWidth,
-
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(
-                                min = 200.dp
-                            )
-                            .scale(zoom)
-                            .pointerInput(
-                                zoom
-                            ) {
-
-                                detectTransformGestures {
-                                    _, _, scale, _ ->
-
-                                        // Gesture handling is
-                                        // intentionally kept
-                                        // passive here.
-                                        // The zoom buttons
-                                        // control the reader
-                                        // zoom level.
+                                    detectTransformGestures {
+                                        _, _, _, _ ->
+                                    }
                                 }
-                            }
-                )
+                    )
+                }
             }
         }
     }
