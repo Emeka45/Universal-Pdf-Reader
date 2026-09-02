@@ -85,6 +85,12 @@ object ReaderFormatRouter {
                     uri
                 )
 
+            DocumentFormat.ZIP ->
+                ZipReader.open(
+                    context,
+                    uri
+                )
+
             DocumentFormat.CBZ ->
                 throw UnsupportedOperationException(
                     "CBZ uses the comic reader."
@@ -92,12 +98,22 @@ object ReaderFormatRouter {
 
             DocumentFormat.CBR ->
                 throw UnsupportedOperationException(
-                    "CBR/RAR reading is not implemented yet."
+                    "CBR uses the comic reader."
                 )
 
-            else ->
+            DocumentFormat.PDF ->
                 throw UnsupportedOperationException(
-                    "This format is not handled by the reader engine yet: $format"
+                    "PDF uses the PDF reader."
+                )
+
+            DocumentFormat.EPUB ->
+                throw UnsupportedOperationException(
+                    "EPUB uses the EPUB reader."
+                )
+
+            DocumentFormat.UNKNOWN ->
+                throw UnsupportedOperationException(
+                    "This document format is not supported."
                 )
         }
     }
