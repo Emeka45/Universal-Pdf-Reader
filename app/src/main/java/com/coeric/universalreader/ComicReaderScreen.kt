@@ -1,7 +1,5 @@
 package com.coeric.universalreader
 
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -10,13 +8,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.ZoomIn
-import androidx.compose.material.icons.filled.ZoomOut
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -31,12 +32,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import android.graphics.BitmapFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import kotlin.math.max
 import kotlin.math.min
 
@@ -46,45 +54,34 @@ fun ComicReaderScreen(
     documentUri: String
 ) {
 
-    val context =
-        LocalContext.current
+    val context = LocalContext.current
 
     var currentPage by remember {
-        mutableIntStateOf(0)
+        mutableIntStateOf(
+            ComicReadingPositionRepository
+                .get(
+                    context,
+                    documentUri
+                )
+                ?.pageIndex
+                ?.coerceIn(
+                    0,
+                    max(0, pages.lastIndex)
+                )
+                ?: 0
+        )
     }
 
     var zoom by remember {
         mutableFloatStateOf(1f)
     }
 
-    var positionLoaded by remember {
-        mutableIntStateOf(0)
+    var offsetX by remember {
+        mutableFloatStateOf(0f)
     }
 
-    LaunchedEffect(
-        documentUri,
-        pages.size
-    ) {
-
-        val savedPosition =
-            ComicReadingPositionRepository.get(
-                context = context,
-                documentUri = documentUri
-            )
-
-        if (
-            savedPosition != null &&
-            pages.isNotEmpty()
-        ) {
-
-            currentPage =
-                savedPosition.pageIndex.coerceIn(
-                    0,
-                    pages.lastIndex
-                )
-        }
-
-        positionLoaded = 1
+    var offsetY by remember {
+        mutableFloatStateOf(0f)
     }
 
     LaunchedEffect(
@@ -92,124 +89,195 @@ fun ComicReaderScreen(
         documentUri
     ) {
 
-        if (
-            positionLoaded == 1 &&
-            pages.isNotEmpty()
-        ) {
-
-            ComicReadingPositionRepository.save(
-                context = context,
-
-                position =
-                    ComicReadingPosition(
-                        documentUri =
-                            documentUri,
-
-                        pageIndex =
-                            currentPage
-                    )
+        ComicReadingPositionRepository.save(
+            context,
+            ComicReadingPosition(
+                documentUri = documentUri,
+                pageIndex = currentPage
             )
-        }
+        )
     }
 
     if (pages.isEmpty()) {
 
         Box(
-            modifier =
-                Modifier.fillMaxSize(),
-
-            contentAlignment =
-                Alignment.Center
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
 
             Text(
-                text =
-                    "No comic pages found."
+                text = "This comic contains no readable pages."
             )
         }
 
         return
     }
-
-    if (positionLoaded == 0) {
-
-        Box(
-            modifier =
-                Modifier.fillMaxSize(),
-
-            contentAlignment =
-                Alignment.Center
-        ) {
-
-            Text(
-                text =
-                    "Loading comic..."
-            )
-        }
-
-        return
-    }
-
-    val safePage =
-        currentPage.coerceIn(
-            0,
-            pages.lastIndex
-        )
-
-    val page =
-        pages[safePage]
-
-    val bitmap =
-        remember(
-            page.file.absolutePath
-        ) {
-
-            BitmapFactory.decodeFile(
-                page.file.absolutePath
-            )
-        }
 
     Column(
         modifier =
             Modifier
                 .fillMaxSize()
                 .background(
-                    MaterialTheme
-                        .colorScheme
-                        .background
+                    MaterialTheme.colorScheme.background
                 )
     ) {
 
-        Row(
+        ComicTopBar(
+            currentPage = currentPage,
+            totalPages = pages.size,
+            zoom = zoom,
+
+            onPrevious = {
+
+                if (currentPage > 0) {
+
+                    currentPage--
+
+                    zoom = 1f
+                    offsetX = 0f
+                    offsetY = 0f
+                }
+            },
+
+            onNext = {
+
+                if (currentPage < pages.lastIndex) {
+
+                    currentPage++
+
+                    zoom = 1f
+                    offsetX = 0f
+                    offsetY = 0f
+                }
+            },
+
+            onZoomOut = {
+
+                zoom =
+                    (zoom - 0.25f)
+                        .coerceAtLeast(1f)
+
+                if (zoom == 1f) {
+                    offsetX = 0f
+                    offsetY = 0f
+                }
+            },
+
+            onZoomIn = {
+
+                zoom =
+                    (zoom + 0.25f)
+                        .coerceAtMost(4f)
+            }
+        )
+
+        LinearProgressIndicator(
+            progress = {
+                if (pages.size <= 1) {
+                    1f
+                } else {
+                    currentPage.toFloat() /
+                        pages.lastIndex.toFloat()
+                }
+            },
+
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+        )
+
+        ComicPageView(
+            page = pages[currentPage],
+
+            zoom = zoom,
+
+            offsetX = offsetX,
+            offsetY = offsetY,
+
+            onTransform = { gestureZoom, gestureX, gestureY ->
+
+                val newZoom =
+                    (zoom * gestureZoom)
+                        .coerceIn(1f, 4f)
+
+                zoom = newZoom
+
+                if (newZoom <= 1f) {
+
+                    offsetX = 0f
+                    offsetY = 0f
+
+                } else {
+
+                    offsetX += gestureX
+                    offsetY += gestureY
+                }
+            },
+
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+        )
+
+        Text(
+            text =
+                pages[currentPage].name,
+
+            style =
+                MaterialTheme.typography.labelMedium,
+
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .padding(
-                        horizontal = 4.dp
-                    ),
+                        horizontal = 12.dp,
+                        vertical = 6.dp
+                    )
+        )
+    }
+}
 
+@Composable
+private fun ComicTopBar(
+    currentPage: Int,
+    totalPages: Int,
+    zoom: Float,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onZoomOut: () -> Unit,
+    onZoomIn: () -> Unit
+) {
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 8.dp,
+                    vertical = 4.dp
+                ),
+
+        verticalAlignment =
+            Alignment.CenterVertically,
+
+        horizontalArrangement =
+            Arrangement.SpaceBetween
+    ) {
+
+        Row(
             verticalAlignment =
-                Alignment.CenterVertically,
-
-            horizontalArrangement =
-                Arrangement.SpaceBetween
+                Alignment.CenterVertically
         ) {
 
             IconButton(
-                onClick = {
-
-                    if (safePage > 0) {
-
-                        currentPage--
-
-                        zoom = 1f
-                    }
-                }
+                onClick = onPrevious,
+                enabled = currentPage > 0
             ) {
 
                 Icon(
                     imageVector =
-                        Icons.Default.KeyboardArrowLeft,
+                        Icons.Default.ChevronLeft,
 
                     contentDescription =
                         "Previous page"
@@ -218,32 +286,21 @@ fun ComicReaderScreen(
 
             Text(
                 text =
-                    "${safePage + 1} / ${pages.size}",
+                    "${currentPage + 1} / $totalPages",
 
                 style =
-                    MaterialTheme
-                        .typography
-                        .titleMedium
+                    MaterialTheme.typography.titleMedium
             )
 
             IconButton(
-                onClick = {
-
-                    if (
-                        safePage <
-                        pages.lastIndex
-                    ) {
-
-                        currentPage++
-
-                        zoom = 1f
-                    }
-                }
+                onClick = onNext,
+                enabled =
+                    currentPage < totalPages - 1
             ) {
 
                 Icon(
                     imageVector =
-                        Icons.Default.KeyboardArrowRight,
+                        Icons.Default.ChevronRight,
 
                     contentDescription =
                         "Next page"
@@ -251,52 +308,19 @@ fun ComicReaderScreen(
             }
         }
 
-        LinearProgressIndicator(
-            progress = {
-
-                (
-                    (safePage + 1).toFloat() /
-                        pages.size.toFloat()
-                ).coerceIn(
-                    0f,
-                    1f
-                )
-            },
-
-            modifier =
-                Modifier.fillMaxWidth()
-        )
-
         Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 8.dp,
-                        vertical = 4.dp
-                    ),
-
-            horizontalArrangement =
-                Arrangement.Center,
-
             verticalAlignment =
                 Alignment.CenterVertically
         ) {
 
             IconButton(
-                onClick = {
-
-                    zoom =
-                        max(
-                            1f,
-                            zoom - 0.25f
-                        )
-                }
+                onClick = onZoomOut,
+                enabled = zoom > 1f
             ) {
 
                 Icon(
                     imageVector =
-                        Icons.Default.ZoomOut,
+                        Icons.Default.Remove,
 
                     contentDescription =
                         "Zoom out"
@@ -305,80 +329,119 @@ fun ComicReaderScreen(
 
             Text(
                 text =
-                    "${(zoom * 100).toInt()}%"
+                    "${(zoom * 100).toInt()}%",
+
+                style =
+                    MaterialTheme.typography.labelLarge
             )
 
             IconButton(
-                onClick = {
-
-                    zoom =
-                        min(
-                            4f,
-                            zoom + 0.25f
-                        )
-                }
+                onClick = onZoomIn,
+                enabled = zoom < 4f
             ) {
 
                 Icon(
                     imageVector =
-                        Icons.Default.ZoomIn,
+                        Icons.Default.Add,
 
                     contentDescription =
                         "Zoom in"
                 )
             }
         }
+    }
+}
 
-        if (bitmap == null) {
+@Composable
+private fun ComicPageView(
+    page: ComicPage,
+    zoom: Float,
+    offsetX: Float,
+    offsetY: Float,
+    onTransform: (
+        Float,
+        Float,
+        Float
+    ) -> Unit,
+    modifier: Modifier = Modifier
+) {
 
-            Box(
-                modifier =
-                    Modifier.fillMaxSize(),
+    var bitmap by remember(page.file) {
+        androidx.compose.runtime.mutableStateOf<ImageBitmap?>(null)
+    }
 
-                contentAlignment =
-                    Alignment.Center
-            ) {
+    LaunchedEffect(page.file) {
 
-                Text(
-                    text =
-                        "Unable to display this page."
-                )
+        bitmap =
+            withContext(Dispatchers.IO) {
+
+                BitmapFactory
+                    .decodeFile(
+                        page.file.absolutePath
+                    )
+                    ?.asImageBitmap()
             }
+    }
+
+    Box(
+        modifier =
+            modifier
+                .clipToBounds()
+                .pointerInput(page.file) {
+
+                    detectTransformGestures {
+                        _,
+                        pan,
+                        gestureZoom,
+                        _ ->
+
+                        onTransform(
+                            gestureZoom,
+                            pan.x,
+                            pan.y
+                        )
+                    }
+                },
+
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        val image =
+            bitmap
+
+        if (image == null) {
+
+            Text(
+                text = "Loading page..."
+            )
 
         } else {
 
-            Box(
+            Image(
+                bitmap = image,
+
+                contentDescription =
+                    page.name,
+
+                contentScale =
+                    ContentScale.Fit,
+
                 modifier =
-                    Modifier.fillMaxSize()
-            ) {
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
 
-                Image(
-                    bitmap =
-                        bitmap.asImageBitmap(),
+                            scaleX = zoom
+                            scaleY = zoom
 
-                    contentDescription =
-                        page.name,
+                            translationX =
+                                offsetX
 
-                    contentScale =
-                        ContentScale.FillWidth,
-
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(
-                                min = 200.dp
-                            )
-                            .scale(zoom)
-                            .pointerInput(
-                                zoom
-                            ) {
-
-                                detectTransformGestures {
-                                    _, _, _, _ ->
-                                }
-                            }
-                )
-            }
+                            translationY =
+                                offsetY
+                        }
+            )
         }
     }
 }
