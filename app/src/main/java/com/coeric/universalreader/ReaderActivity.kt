@@ -254,7 +254,10 @@ private fun CbzReaderContent(
 
             ComicReaderScreen(
                 pages =
-                    archive!!.pages
+                    archive!!.pages,
+
+                documentUri =
+                    uri.toString()
             )
         }
     }
@@ -316,7 +319,10 @@ private fun CbrReaderContent(
 
             ComicReaderScreen(
                 pages =
-                    archive!!.pages
+                    archive!!.pages,
+
+                documentUri =
+                    uri.toString()
             )
         }
     }
