@@ -2,6 +2,7 @@ package com.coeric.universalreader
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
@@ -75,6 +77,10 @@ fun ReaderDocumentScreen(
         mutableStateOf(false)
     }
 
+    var showSearch by remember {
+        mutableStateOf(false)
+    }
+
     var selectedChapter by remember {
         mutableStateOf(0)
     }
@@ -105,8 +111,39 @@ fun ReaderDocumentScreen(
         )
     }
 
+    val savedPosition =
+        remember(documentUri) {
+            ReadingPositionRepository.get(
+                context,
+                documentUri
+            )
+        }
+
+    LaunchedEffect(
+        savedPosition
+    ) {
+        if (
+            savedPosition != null
+        ) {
+            selectedChapter =
+                savedPosition.chapterIndex
+                    .coerceIn(
+                        0,
+                        (
+                            document.chapters.size - 1
+                        ).coerceAtLeast(0)
+                    )
+        }
+    }
+
     BackHandler {
+
         when {
+
+            showSearch -> {
+                showSearch = false
+            }
+
             showAddBookmark -> {
                 showAddBookmark = false
             }
@@ -134,42 +171,66 @@ fun ReaderDocumentScreen(
         }
     }
 
-    if (showAddBookmark) {
+    if (
+        showAddBookmark
+    ) {
         AddBookmarkDialog(
-            document = document,
-            documentUri = documentUri,
-            chapterIndex = selectedChapter,
+            document =
+                document,
+
+            documentUri =
+                documentUri,
+
+            chapterIndex =
+                selectedChapter,
 
             onDismiss = {
-                showAddBookmark = false
+                showAddBookmark =
+                    false
             },
 
             onAdded = {
-                bookmarks =
-                    BookmarkRepository.getBookmarks(
-                        context,
-                        documentUri
-                    )
 
-                showAddBookmark = false
+                bookmarks =
+                    BookmarkRepository
+                        .getBookmarks(
+                            context,
+                            documentUri
+                        )
+
+                showAddBookmark =
+                    false
             }
         )
     }
 
     Scaffold(
+
         topBar = {
+
             CenterAlignedTopAppBar(
+
                 title = {
+
                     Text(
-                        text = document.title,
+                        text =
+                            document.title,
+
                         maxLines = 1
                     )
                 },
 
                 navigationIcon = {
+
                     IconButton(
                         onClick = {
+
                             when {
+
+                                showSearch -> {
+                                    showSearch = false
+                                }
+
                                 showAddBookmark -> {
                                     showAddBookmark = false
                                 }
@@ -197,6 +258,7 @@ fun ReaderDocumentScreen(
                             }
                         }
                     ) {
+
                         Icon(
                             imageVector =
                                 Icons.Default.ArrowBack,
@@ -211,13 +273,40 @@ fun ReaderDocumentScreen(
 
                     IconButton(
                         onClick = {
-                            showAddBookmark = true
+
+                            showSearch =
+                                !showSearch
+
+                            showAddBookmark = false
                             showSettings = false
                             showChapterList = false
                             showBookmarks = false
                             showHighlights = false
                         }
                     ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Default.Search,
+
+                            contentDescription =
+                                "Search"
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+
+                            showAddBookmark = true
+
+                            showSearch = false
+                            showSettings = false
+                            showChapterList = false
+                            showBookmarks = false
+                            showHighlights = false
+                        }
+                    ) {
+
                         Icon(
                             imageVector =
                                 Icons.Default.Bookmark,
@@ -233,11 +322,13 @@ fun ReaderDocumentScreen(
                             showBookmarks =
                                 !showBookmarks
 
+                            showSearch = false
                             showSettings = false
                             showChapterList = false
                             showHighlights = false
                         }
                     ) {
+
                         Icon(
                             imageVector =
                                 Icons.Default.Star,
@@ -253,11 +344,13 @@ fun ReaderDocumentScreen(
                             showHighlights =
                                 !showHighlights
 
+                            showSearch = false
                             showSettings = false
                             showChapterList = false
                             showBookmarks = false
                         }
                     ) {
+
                         Icon(
                             imageVector =
                                 Icons.Default.Star,
@@ -273,11 +366,13 @@ fun ReaderDocumentScreen(
                             showSettings =
                                 !showSettings
 
+                            showSearch = false
                             showChapterList = false
                             showBookmarks = false
                             showHighlights = false
                         }
                     ) {
+
                         Icon(
                             imageVector =
                                 Icons.Default.Settings,
@@ -293,11 +388,13 @@ fun ReaderDocumentScreen(
                             showChapterList =
                                 !showChapterList
 
+                            showSearch = false
                             showSettings = false
                             showBookmarks = false
                             showHighlights = false
                         }
                     ) {
+
                         Icon(
                             imageVector =
                                 Icons.Default.Menu,
@@ -309,14 +406,50 @@ fun ReaderDocumentScreen(
                 }
             )
         }
+
     ) { paddingValues ->
 
         when {
 
+            showSearch -> {
+
+                DocumentSearchPanel(
+                    document =
+                        document,
+
+                    onChapterSelected = {
+                        chapterIndex ->
+
+                        selectedChapter =
+                            chapterIndex
+
+                        saveChapterPosition(
+                            context =
+                                context,
+
+                            documentUri =
+                                documentUri,
+
+                            chapterIndex =
+                                chapterIndex
+                        )
+
+                        showSearch =
+                            false
+                    },
+
+                    modifier =
+                        Modifier.padding(
+                            paddingValues
+                        )
+                )
+            }
+
             showSettings -> {
 
                 ReaderSettingsPanel(
-                    settings = settings,
+                    settings =
+                        settings,
 
                     onSettingsChanged = {
                         newSettings ->
@@ -352,22 +485,15 @@ fun ReaderDocumentScreen(
                         selectedChapter =
                             index
 
-                        ReadingPositionRepository.save(
-                            context,
+                        saveChapterPosition(
+                            context =
+                                context,
 
-                            ReadingPosition(
-                                documentUri =
-                                    documentUri,
+                            documentUri =
+                                documentUri,
 
-                                chapterIndex =
-                                    index,
-
-                                scrollIndex =
-                                    0,
-
-                                scrollOffset =
-                                    0
-                            )
+                            chapterIndex =
+                                index
                         )
 
                         showChapterList =
@@ -387,19 +513,42 @@ fun ReaderDocumentScreen(
                     bookmarks =
                         bookmarks,
 
+                    onBookmarkSelected = {
+                        bookmark ->
+
+                        selectedChapter =
+                            bookmark.chapterIndex
+
+                        saveChapterPosition(
+                            context =
+                                context,
+
+                            documentUri =
+                                documentUri,
+
+                            chapterIndex =
+                                bookmark.chapterIndex
+                        )
+
+                        showBookmarks =
+                            false
+                    },
+
                     onDelete = {
                         bookmark ->
 
-                        BookmarkRepository.removeBookmark(
-                            context,
-                            bookmark.id
-                        )
+                        BookmarkRepository
+                            .removeBookmark(
+                                context,
+                                bookmark.id
+                            )
 
                         bookmarks =
-                            BookmarkRepository.getBookmarks(
-                                context,
-                                documentUri
-                            )
+                            BookmarkRepository
+                                .getBookmarks(
+                                    context,
+                                    documentUri
+                                )
                     },
 
                     modifier =
@@ -415,19 +564,42 @@ fun ReaderDocumentScreen(
                     highlights =
                         highlights,
 
+                    onHighlightSelected = {
+                        highlight ->
+
+                        selectedChapter =
+                            highlight.chapterIndex
+
+                        saveChapterPosition(
+                            context =
+                                context,
+
+                            documentUri =
+                                documentUri,
+
+                            chapterIndex =
+                                highlight.chapterIndex
+                        )
+
+                        showHighlights =
+                            false
+                    },
+
                     onDelete = {
                         highlight ->
 
-                        HighlightRepository.removeHighlight(
-                            context,
-                            highlight.id
-                        )
+                        HighlightRepository
+                            .removeHighlight(
+                                context,
+                                highlight.id
+                            )
 
                         highlights =
-                            HighlightRepository.getHighlights(
-                                context,
-                                documentUri
-                            )
+                            HighlightRepository
+                                .getHighlights(
+                                    context,
+                                    documentUri
+                                )
                     },
 
                     modifier =
@@ -451,6 +623,16 @@ fun ReaderDocumentScreen(
 
                     settings =
                         settings,
+
+                    onBookmarkAdded = {
+
+                        bookmarks =
+                            BookmarkRepository
+                                .getBookmarks(
+                                    context,
+                                    documentUri
+                                )
+                    },
 
                     onHighlightAdded = {
 
@@ -481,18 +663,14 @@ private fun ChapterList(
 ) {
     LazyColumn(
         modifier =
-            modifier.fillMaxSize(),
-
-        verticalArrangement =
-            Arrangement.spacedBy(
-                2.dp
-            )
+            modifier.fillMaxSize()
     ) {
 
         item {
 
             Text(
-                text = "Chapters",
+                text =
+                    "Chapters",
 
                 style =
                     MaterialTheme
@@ -536,6 +714,11 @@ private fun ChapterList(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .clickable {
+                            onChapterSelected(
+                                index
+                            )
+                        }
                         .padding(
                             horizontal = 20.dp,
                             vertical = 16.dp
@@ -548,6 +731,7 @@ private fun ChapterList(
 @Composable
 private fun BookmarkList(
     bookmarks: List<Bookmark>,
+    onBookmarkSelected: (Bookmark) -> Unit,
     onDelete: (Bookmark) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -564,7 +748,8 @@ private fun BookmarkList(
         item {
 
             Text(
-                text = "Bookmarks",
+                text =
+                    "Bookmarks",
 
                 style =
                     MaterialTheme
@@ -582,7 +767,9 @@ private fun BookmarkList(
             )
         }
 
-        if (bookmarks.isEmpty()) {
+        if (
+            bookmarks.isEmpty()
+        ) {
 
             item {
 
@@ -607,6 +794,11 @@ private fun BookmarkList(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .clickable {
+                            onBookmarkSelected(
+                                bookmark
+                            )
+                        }
                         .padding(
                             horizontal = 20.dp,
                             vertical = 8.dp
@@ -638,7 +830,9 @@ private fun BookmarkList(
 
                 OutlinedButton(
                     onClick = {
-                        onDelete(bookmark)
+                        onDelete(
+                            bookmark
+                        )
                     },
 
                     modifier =
@@ -648,7 +842,8 @@ private fun BookmarkList(
                 ) {
 
                     Text(
-                        text = "Delete"
+                        text =
+                            "Delete"
                     )
                 }
             }
@@ -659,6 +854,7 @@ private fun BookmarkList(
 @Composable
 private fun HighlightList(
     highlights: List<Highlight>,
+    onHighlightSelected: (Highlight) -> Unit,
     onDelete: (Highlight) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -675,7 +871,8 @@ private fun HighlightList(
         item {
 
             Text(
-                text = "Highlights",
+                text =
+                    "Highlights",
 
                 style =
                     MaterialTheme
@@ -693,7 +890,9 @@ private fun HighlightList(
             )
         }
 
-        if (highlights.isEmpty()) {
+        if (
+            highlights.isEmpty()
+        ) {
 
             item {
 
@@ -718,6 +917,11 @@ private fun HighlightList(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .clickable {
+                            onHighlightSelected(
+                                highlight
+                            )
+                        }
                         .padding(
                             horizontal = 20.dp,
                             vertical = 8.dp
@@ -774,7 +978,9 @@ private fun HighlightList(
 
                 OutlinedButton(
                     onClick = {
-                        onDelete(highlight)
+                        onDelete(
+                            highlight
+                        )
                     },
 
                     modifier =
@@ -784,7 +990,8 @@ private fun HighlightList(
                 ) {
 
                     Text(
-                        text = "Delete"
+                        text =
+                            "Delete"
                     )
                 }
             }
@@ -817,10 +1024,12 @@ private fun AddBookmarkDialog(
     }
 
     AlertDialog(
+
         onDismissRequest =
             onDismiss,
 
         title = {
+
             Text(
                 text =
                     "Add Bookmark"
@@ -838,6 +1047,7 @@ private fun AddBookmarkDialog(
                 },
 
                 label = {
+
                     Text(
                         text =
                             "Bookmark title"
@@ -854,29 +1064,31 @@ private fun AddBookmarkDialog(
             Button(
                 onClick = {
 
-                    BookmarkRepository.addBookmark(
+                    BookmarkRepository
+                        .addBookmark(
 
-                        context =
-                            context,
+                            context =
+                                context,
 
-                        documentUri =
-                            documentUri,
+                            documentUri =
+                                documentUri,
 
-                        chapterIndex =
-                            chapterIndex,
+                            chapterIndex =
+                                chapterIndex,
 
-                        title =
-                            title.ifBlank {
-                                "Bookmark"
-                            }
-                    )
+                            title =
+                                title.ifBlank {
+                                    "Bookmark"
+                                }
+                        )
 
                     onAdded()
                 }
             ) {
 
                 Text(
-                    text = "Save"
+                    text =
+                        "Save"
                 )
             }
         },
@@ -889,7 +1101,8 @@ private fun AddBookmarkDialog(
             ) {
 
                 Text(
-                    text = "Cancel"
+                    text =
+                        "Cancel"
                 )
             }
         }
@@ -902,6 +1115,7 @@ private fun DocumentContent(
     selectedChapter: Int,
     documentUri: String,
     settings: ReaderSettings,
+    onBookmarkAdded: () -> Unit,
     onHighlightAdded: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -947,8 +1161,7 @@ private fun DocumentContent(
 
     LaunchedEffect(
         listState.firstVisibleItemIndex,
-        listState.firstVisibleItemScrollOffset,
-        selectedChapter
+        listState.firstVisibleItemScrollOffset
     ) {
 
         ReadingPositionRepository.save(
@@ -986,6 +1199,27 @@ private fun DocumentContent(
                 TextAlign.Justify
         }
 
+    val textColor =
+        when (
+            settings.theme
+        ) {
+
+            ReaderTheme.LIGHT ->
+                MaterialTheme
+                    .colorScheme
+                    .onBackground
+
+            ReaderTheme.DARK ->
+                MaterialTheme
+                    .colorScheme
+                    .onBackground
+
+            ReaderTheme.SEPIA ->
+                MaterialTheme
+                    .colorScheme
+                    .onBackground
+        }
+
     val textStyle =
         TextStyle(
 
@@ -1002,12 +1236,11 @@ private fun DocumentContent(
                 alignment,
 
             color =
-                MaterialTheme
-                    .colorScheme
-                    .onBackground
+                textColor
         )
 
     LazyColumn(
+
         state =
             listState,
 
@@ -1023,6 +1256,7 @@ private fun DocumentContent(
         item {
 
             Column(
+
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -1071,6 +1305,7 @@ private fun DocumentContent(
         ) { index, chapter ->
 
             Column(
+
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -1080,6 +1315,7 @@ private fun DocumentContent(
             ) {
 
                 Row(
+
                     modifier =
                         Modifier.fillMaxWidth(),
 
@@ -1101,6 +1337,7 @@ private fun DocumentContent(
                     )
 
                     IconButton(
+
                         onClick = {
 
                             BookmarkRepository
@@ -1119,7 +1356,7 @@ private fun DocumentContent(
                                         chapter.title
                                 )
 
-                            onHighlightAdded()
+                            onBookmarkAdded()
                         }
                     ) {
 
@@ -1134,6 +1371,7 @@ private fun DocumentContent(
                 }
 
                 SelectableHighlightText(
+
                     text =
                         chapter.content,
 
@@ -1158,4 +1396,212 @@ private fun DocumentContent(
             }
         }
     }
+}
+
+@Composable
+private fun DocumentSearchPanel(
+    document: ReaderDocument,
+    onChapterSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var query by remember {
+        mutableStateOf("")
+    }
+
+    val results =
+        remember(
+            query,
+            document
+        ) {
+
+            if (
+                query.isBlank()
+            ) {
+                emptyList()
+            } else {
+
+                document.chapters
+                    .mapIndexedNotNull {
+                        index,
+                        chapter ->
+
+                        val position =
+                            chapter.content
+                                .indexOf(
+                                    query,
+                                    ignoreCase = true
+                                )
+
+                        if (
+                            position < 0
+                        ) {
+                            null
+                        } else {
+
+                            val start =
+                                (
+                                    position - 60
+                                ).coerceAtLeast(0)
+
+                            val end =
+                                (
+                                    position +
+                                        query.length +
+                                        100
+                                ).coerceAtMost(
+                                    chapter.content.length
+                                )
+
+                            SearchResult(
+                                chapterIndex =
+                                    index,
+
+                                chapterTitle =
+                                    chapter.title,
+
+                                matchingText =
+                                    chapter.content
+                                        .substring(
+                                            start,
+                                            end
+                                        )
+                            )
+                        }
+                    }
+            }
+        }
+
+    Column(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(20.dp),
+
+        verticalArrangement =
+            Arrangement.spacedBy(
+                12.dp
+            )
+    ) {
+
+        TextField(
+
+            value =
+                query,
+
+            onValueChange = {
+                query = it
+            },
+
+            label = {
+                Text(
+                    text =
+                        "Search this book"
+                )
+            },
+
+            modifier =
+                Modifier.fillMaxWidth()
+        )
+
+        LazyColumn(
+            modifier =
+                Modifier.fillMaxSize()
+        ) {
+
+            if (
+                query.isNotBlank() &&
+                results.isEmpty()
+            ) {
+
+                item {
+
+                    Text(
+                        text =
+                            "No results found.",
+
+                        modifier =
+                            Modifier.padding(
+                                vertical = 16.dp
+                            )
+                    )
+                }
+            }
+
+            itemsIndexed(
+                results
+            ) { _, result ->
+
+                Column(
+
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+
+                                onChapterSelected(
+                                    result.chapterIndex
+                                )
+                            }
+                            .padding(
+                                vertical = 12.dp
+                            )
+                ) {
+
+                    Text(
+                        text =
+                            result.chapterTitle,
+
+                        style =
+                            MaterialTheme
+                                .typography
+                                .titleMedium,
+
+                        fontWeight =
+                            FontWeight.Bold
+                    )
+
+                    Text(
+                        text =
+                            result.matchingText,
+
+                        style =
+                            MaterialTheme
+                                .typography
+                                .bodyMedium,
+
+                        modifier =
+                            Modifier.padding(
+                                top = 4.dp
+                            )
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun saveChapterPosition(
+    context: android.content.Context,
+    documentUri: String,
+    chapterIndex: Int
+) {
+    ReadingPositionRepository.save(
+
+        context,
+
+        ReadingPosition(
+
+            documentUri =
+                documentUri,
+
+            chapterIndex =
+                chapterIndex,
+
+            scrollIndex =
+                chapterIndex + 1,
+
+            scrollOffset =
+                0
+        )
+    )
 }
