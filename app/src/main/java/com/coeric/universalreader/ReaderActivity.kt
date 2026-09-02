@@ -5,8 +5,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 
 class ReaderActivity : ComponentActivity() {
 
@@ -36,7 +42,9 @@ class ReaderActivity : ComponentActivity() {
             Uri.parse(uriString)
 
         setContent {
-            ReaderContent(uri)
+            ReaderContent(
+                uri = uri
+            )
         }
     }
 }
@@ -45,6 +53,7 @@ class ReaderActivity : ComponentActivity() {
 private fun ReaderContent(
     uri: Uri
 ) {
+
     val context =
         androidx.compose.ui.platform.LocalContext.current
 
@@ -57,13 +66,19 @@ private fun ReaderContent(
     }
 
     LaunchedEffect(uri) {
+
         try {
+
             format =
                 DocumentFormatDetector.detect(
                     context,
                     uri
                 )
-        } catch (exception: Exception) {
+
+        } catch (
+            exception: Exception
+        ) {
+
             error =
                 exception.message
                     ?: "Unable to detect document format."
@@ -71,7 +86,9 @@ private fun ReaderContent(
     }
 
     when {
+
         error != null -> {
+
             ErrorScreen(
                 message =
                     error
@@ -80,124 +97,53 @@ private fun ReaderContent(
         }
 
         format == null -> {
+
             LoadingScreen()
         }
 
-        format == DocumentFormat.CBZ -> {
-            CbzReaderContent(uri)
-        }
+        format == DocumentFormat.PDF -> {
 
-        format == DocumentFormat.CBR -> {
-            ErrorScreen(
-                message =
-                    "CBR support is not enabled yet."
-            )
-        }
-
-        else -> {
-            ExistingFormatContent(
-                uri = uri,
-                format = format!!
-            )
-        }
-    }
-}
-
-@Composable
-private fun ExistingFormatContent(
-    uri: Uri,
-    format: DocumentFormat
-) {
-    when (format) {
-
-        DocumentFormat.PDF -> {
             PdfReaderView(
                 uri = uri
             )
         }
 
-        DocumentFormat.EPUB -> {
+        format == DocumentFormat.EPUB -> {
+
             EpubReaderScreen(
                 uri = uri
             )
         }
 
-        DocumentFormat.MOBI,
-        DocumentFormat.AZW,
-        DocumentFormat.AZW3 -> {
-            MobiReaderScreen(
+        format == DocumentFormat.CBZ -> {
+
+            CbzReaderContent(
                 uri = uri
             )
         }
 
-        DocumentFormat.FB2 -> {
-            Fb2ReaderContent(
-                uri = uri
-            )
-        }
+        format == DocumentFormat.CBR -> {
 
-        else -> {
-            TextReaderScreen(
-                uri = uri
-            )
-        }
-    }
-}
-
-@Composable
-private fun CbzReaderContent(
-    uri: Uri
-) {
-    val context =
-        androidx.compose.ui.platform.LocalContext.current
-
-    var pages by remember {
-        mutableStateOf<List<ComicPage>?>(null)
-    }
-
-    var error by remember {
-        mutableStateOf<String?>(null)
-    }
-
-    LaunchedEffect(uri) {
-        try {
-            pages =
-                CbzReader.open(
-                    context,
-                    uri
-                )
-        } catch (exception: Exception) {
-            error =
-                exception.message
-                    ?: "Unable to open CBZ file."
-        }
-    }
-
-    when {
-        error != null -> {
             ErrorScreen(
                 message =
-                    error
-                        ?: "Unable to open CBZ."
+                    "CBR/RAR reading is not implemented yet."
             )
         }
 
-        pages == null -> {
-            LoadingScreen()
-        }
-
         else -> {
-            ComicReaderScreen(
-                pages = pages!!
+
+            RoutedDocumentContent(
+                uri = uri
             )
         }
     }
 }
 
 @Composable
-private fun Fb2ReaderContent(
+private fun RoutedDocumentContent(
     uri: Uri
 ) {
+
     val context =
         androidx.compose.ui.platform.LocalContext.current
 
@@ -210,35 +156,107 @@ private fun Fb2ReaderContent(
     }
 
     LaunchedEffect(uri) {
+
         try {
+
             document =
-                Fb2Reader.open(
+                ReaderFormatRouter.open(
                     context,
                     uri
                 )
-        } catch (exception: Exception) {
+
+        } catch (
+            exception: Exception
+        ) {
+
             error =
                 exception.message
-                    ?: "Unable to open FB2 file."
+                    ?: "Unable to open this document."
         }
     }
 
     when {
+
         error != null -> {
+
             ErrorScreen(
                 message =
                     error
-                        ?: "Unable to open FB2."
+                        ?: "Unable to open document."
             )
         }
 
         document == null -> {
+
             LoadingScreen()
         }
 
         else -> {
+
             ReaderDocumentScreen(
                 document = document!!
+            )
+        }
+    }
+}
+
+@Composable
+private fun CbzReaderContent(
+    uri: Uri
+) {
+
+    val context =
+        androidx.compose.ui.platform.LocalContext.current
+
+    var archive by remember {
+        mutableStateOf<ComicArchive?>(null)
+    }
+
+    var error by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    LaunchedEffect(uri) {
+
+        try {
+
+            archive =
+                CbzReader.open(
+                    context,
+                    uri
+                )
+
+        } catch (
+            exception: Exception
+        ) {
+
+            error =
+                exception.message
+                    ?: "Unable to open CBZ file."
+        }
+    }
+
+    when {
+
+        error != null -> {
+
+            ErrorScreen(
+                message =
+                    error
+                        ?: "Unable to open CBZ."
+            )
+        }
+
+        archive == null -> {
+
+            LoadingScreen()
+        }
+
+        else -> {
+
+            ComicReaderScreen(
+                pages =
+                    archive!!.pages
             )
         }
     }
@@ -248,87 +266,94 @@ private fun Fb2ReaderContent(
 private fun ReaderDocumentScreen(
     document: ReaderDocument
 ) {
-    androidx.compose.foundation.lazy.LazyColumn(
+
+    LazyColumn(
         modifier =
             Modifier.fillMaxSize()
     ) {
+
         item {
-            Text(
-                text =
-                    document.title,
 
-                style =
-                    androidx.compose.material3.MaterialTheme
-                        .typography
-                        .headlineMedium,
-
+            Column(
                 modifier =
                     Modifier.padding(
                         20.dp
                     )
-            )
+            ) {
 
-            document.author?.let {
                 Text(
-                    text = it,
+                    text =
+                        document.title,
 
                     style =
-                        androidx.compose.material3.MaterialTheme
+                        MaterialTheme
                             .typography
-                            .bodyLarge,
-
-                    modifier =
-                        Modifier.padding(
-                            horizontal = 20.dp
-                        )
+                            .headlineMedium
                 )
+
+                document.author?.let {
+
+                    Text(
+                        text = it,
+
+                        style =
+                            MaterialTheme
+                                .typography
+                                .bodyLarge,
+
+                        modifier =
+                            Modifier.padding(
+                                top = 8.dp
+                            )
+                    )
+                }
             }
         }
 
         items(
-            document.chapters.size
-        ) { index ->
+            document.chapters
+        ) { chapter ->
 
-            val chapter =
-                document.chapters[index]
-
-            Text(
-                text =
-                    chapter.title,
-
-                style =
-                    androidx.compose.material3.MaterialTheme
-                        .typography
-                        .titleLarge,
-
+            Column(
                 modifier =
                     Modifier.padding(
                         horizontal = 20.dp,
                         vertical = 12.dp
                     )
-            )
+            ) {
 
-            Text(
-                text =
-                    chapter.content,
+                Text(
+                    text =
+                        chapter.title,
 
-                style =
-                    androidx.compose.material3.MaterialTheme
-                        .typography
-                        .bodyLarge,
+                    style =
+                        MaterialTheme
+                            .typography
+                            .titleLarge
+                )
 
-                modifier =
-                    Modifier.padding(
-                        horizontal = 20.dp,
-                        vertical = 8.dp
-                    )
-            )
+                Text(
+                    text =
+                        chapter.content,
+
+                    style =
+                        MaterialTheme
+                            .typography
+                            .bodyLarge,
+
+                    modifier =
+                        Modifier.padding(
+                            top = 8.dp
+                        )
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun LoadingScreen() {
+
     Box(
         modifier =
             Modifier.fillMaxSize(),
@@ -336,6 +361,7 @@ private fun LoadingScreen() {
         contentAlignment =
             Alignment.Center
     ) {
+
         CircularProgressIndicator()
     }
 }
@@ -344,6 +370,7 @@ private fun LoadingScreen() {
 private fun ErrorScreen(
     message: String
 ) {
+
     Box(
         modifier =
             Modifier.fillMaxSize(),
@@ -351,6 +378,7 @@ private fun ErrorScreen(
         contentAlignment =
             Alignment.Center
     ) {
+
         Text(
             text = message,
 
