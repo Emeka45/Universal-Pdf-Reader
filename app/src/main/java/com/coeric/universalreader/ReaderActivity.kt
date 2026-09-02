@@ -9,12 +9,28 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.TextIncrease
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 class ReaderActivity : ComponentActivity() {
 
@@ -26,50 +42,48 @@ class ReaderActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
 
-                Scaffold(
-                    topBar = {
-                        TopAppBar(
-                            title = {
-                                Text("Reader")
-                            }
-                        )
-                    }
-                ) { paddingValues ->
+                if (documentUri != null) {
 
-                    if (documentUri != null) {
+                    ReaderScreen(
+                        uri = Uri.parse(documentUri),
+                        onBack = {
+                            finish()
+                        }
+                    )
 
-                        ReaderContent(
-                            uri = Uri.parse(documentUri),
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(paddingValues)
-                        )
+                } else {
 
-                    } else {
-
-                        Text(
-                            text = "No document selected.",
-                            modifier = Modifier.padding(20.dp)
-                        )
-                    }
+                    Text(
+                        text = "No document selected.",
+                        modifier = Modifier.padding(20.dp)
+                    )
                 }
             }
         }
     }
 }
 
-@androidx.compose.runtime.Composable
-fun ReaderContent(
+@Composable
+fun ReaderScreen(
     uri: Uri,
-    modifier: Modifier = Modifier
+    onBack: () -> Unit
 ) {
 
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
 
-    val text = androidx.compose.runtime.produceState(
+    var fontSize by remember {
+        mutableFloatStateOf(18f)
+    }
+
+    var showFontControls by remember {
+        mutableStateOf(false)
+    }
+
+    val documentText = produceState(
         initialValue = "Loading document...",
-        uri
+        key1 = uri
     ) {
+
         value = try {
 
             context.contentResolver
@@ -78,7 +92,7 @@ fun ReaderContent(
                 ?.use { reader ->
                     reader.readText()
                 }
-                ?: "Unable to open document."
+                ?: "Unable to open this document."
 
         } catch (exception: Exception) {
 
@@ -86,15 +100,95 @@ fun ReaderContent(
         }
     }
 
-    Column(
-        modifier = modifier
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp)
-    ) {
+    Scaffold(
 
-        Text(
-            text = text.value,
-            style = MaterialTheme.typography.bodyLarge
-        )
+        topBar = {
+
+            TopAppBar(
+
+                title = {
+                    Text("Reader")
+                },
+
+                navigationIcon = {
+
+                    IconButton(
+                        onClick = onBack
+                    ) {
+
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+
+                actions = {
+
+                    IconButton(
+                        onClick = {
+                            showFontControls = !showFontControls
+                        }
+                    ) {
+
+                        Icon(
+                            imageVector = Icons.Default.TextIncrease,
+                            contentDescription = "Font size"
+                        )
+                    }
+                }
+            )
+        }
+
+    ) { paddingValues ->
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+
+            if (showFontControls) {
+
+                Column(
+                    modifier = Modifier.padding(
+                        horizontal = 20.dp,
+                        vertical = 8.dp
+                    )
+                ) {
+
+                    Text(
+                        text = "Text Size",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+
+                    Slider(
+                        value = fontSize,
+                        onValueChange = {
+                            fontSize = it
+                        },
+                        valueRange = 12f..32f
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(
+                        rememberScrollState()
+                    )
+                    .padding(20.dp)
+            ) {
+
+                Text(
+                    text = documentText.value,
+                    style = TextStyle(
+                        fontSize = fontSize.sp,
+                        lineHeight = (fontSize * 1.55f).sp
+                    )
+                )
+            }
+        }
     }
 }
