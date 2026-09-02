@@ -384,7 +384,7 @@ private fun ErrorScreen(
 
             modifier =
                 Modifier.padding(
-                    24.dp
+                   24.dp
                 )
         )
     }
