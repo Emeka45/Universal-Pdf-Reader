@@ -28,8 +28,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,45 +47,49 @@ fun ReaderDocumentScreen(
         LocalOnBackPressedDispatcherOwner.current
             ?.onBackPressedDispatcher
 
-    val savedPosition =
-        remember(documentUri) {
-
-            ReadingPositionRepository.get(
-                context,
-                documentUri
-            )
-        }
-
     var showChapterList by remember {
+        mutableStateOf(false)
+    }
+
+    var showSettings by remember {
         mutableStateOf(false)
     }
 
     var selectedChapter by remember {
 
+        mutableStateOf(0)
+    }
+
+    var settings by remember {
+
         mutableStateOf(
-            savedPosition?.chapterIndex
-                ?.coerceIn(
-                    0,
-                    (document.chapters.size - 1)
-                        .coerceAtLeast(0)
-                )
-                ?: 0
+            ReaderSettingsRepository.get(
+                context
+            )
         )
     }
 
     BackHandler {
 
-        if (showChapterList) {
+        when {
 
-            showChapterList = false
+            showSettings -> {
+                showSettings = false
+            }
 
-        } else {
+            showChapterList -> {
+                showChapterList = false
+            }
 
-            backDispatcher?.onBackPressed()
+            else -> {
+                backDispatcher
+                    ?.onBackPressed()
+            }
         }
     }
 
     Scaffold(
+
         topBar = {
 
             CenterAlignedTopAppBar(
@@ -91,7 +97,9 @@ fun ReaderDocumentScreen(
                 title = {
 
                     Text(
-                        text = document.title,
+                        text =
+                            document.title,
+
                         maxLines = 1
                     )
                 },
@@ -101,17 +109,20 @@ fun ReaderDocumentScreen(
                     IconButton(
                         onClick = {
 
-                            if (
-                                showChapterList
-                            ) {
+                            when {
 
-                                showChapterList =
-                                    false
+                                showSettings -> {
+                                    showSettings = false
+                                }
 
-                            } else {
+                                showChapterList -> {
+                                    showChapterList = false
+                                }
 
-                                backDispatcher
-                                    ?.onBackPressed()
+                                else -> {
+                                    backDispatcher
+                                        ?.onBackPressed()
+                                }
                             }
                         }
                     ) {
@@ -133,6 +144,12 @@ fun ReaderDocumentScreen(
 
                             showChapterList =
                                 !showChapterList
+
+                            if (
+                                showChapterList
+                            ) {
+                                showSettings = false
+                            }
                         }
                     ) {
 
@@ -149,62 +166,95 @@ fun ReaderDocumentScreen(
         }
     ) { paddingValues ->
 
-        if (showChapterList) {
+        when {
 
-            ChapterList(
-                document = document,
+            showSettings -> {
 
-                selectedChapter =
-                    selectedChapter,
+                ReaderSettingsPanel(
+                    settings = settings,
 
-                onChapterSelected = { index ->
+                    onSettingsChanged = {
+                        newSettings ->
+
+                        settings =
+                            newSettings
+
+                        ReaderSettingsRepository.save(
+                            context,
+                            newSettings
+                        )
+                    },
+
+                    modifier =
+                        Modifier.padding(
+                            paddingValues
+                        )
+                )
+            }
+
+            showChapterList -> {
+
+                ChapterList(
+                    document = document,
 
                     selectedChapter =
-                        index
+                        selectedChapter,
 
-                    ReadingPositionRepository.save(
-                        context,
-                        ReadingPosition(
-                            documentUri =
-                                documentUri,
+                    onChapterSelected = {
+                        index ->
 
-                            chapterIndex =
-                                index,
+                        selectedChapter =
+                            index
 
-                            scrollIndex =
-                                0,
+                        ReadingPositionRepository.save(
+                            context,
 
-                            scrollOffset =
-                                0
+                            ReadingPosition(
+                                documentUri =
+                                    documentUri,
+
+                                chapterIndex =
+                                    index,
+
+                                scrollIndex =
+                                    0,
+
+                                scrollOffset =
+                                    0
+                            )
                         )
-                    )
 
-                    showChapterList =
-                        false
-                },
+                        showChapterList =
+                            false
+                    },
 
-                modifier =
-                    Modifier.padding(
-                        paddingValues
-                    )
-            )
+                    modifier =
+                        Modifier.padding(
+                            paddingValues
+                        )
+                )
+            }
 
-        } else {
+            else -> {
 
-            DocumentContent(
-                document = document,
+                DocumentContent(
+                    document = document,
 
-                selectedChapter =
-                    selectedChapter,
+                    selectedChapter =
+                        selectedChapter,
 
-                documentUri =
-                    documentUri,
+                    documentUri =
+                        documentUri,
 
-                modifier =
-                    Modifier.padding(
-                        paddingValues
-                    )
-            )
+                    settings =
+                        settings,
+
+                    modifier =
+                        Modifier.padding(
+                            paddingValues
+                        )
+                )
+            }
         }
     }
 }
@@ -230,15 +280,13 @@ private fun ChapterList(
         item {
 
             Text(
-                text = "Chapters",
+                text =
+                    "Chapters",
 
                 style =
                     MaterialTheme
                         .typography
                         .headlineSmall,
-
-                fontWeight =
-                    FontWeight.Bold,
 
                 modifier =
                     Modifier.padding(
@@ -266,12 +314,11 @@ private fun ChapterList(
                         index ==
                         selectedChapter
                     ) {
-
-                        FontWeight.Bold
-
+                        androidx.compose.ui.text.font
+                            .FontWeight.Bold
                     } else {
-
-                        FontWeight.Normal
+                        androidx.compose.ui.text.font
+                            .FontWeight.Normal
                     },
 
                 modifier =
@@ -297,6 +344,7 @@ private fun DocumentContent(
     document: ReaderDocument,
     selectedChapter: Int,
     documentUri: String,
+    settings: ReaderSettings,
     modifier: Modifier = Modifier
 ) {
 
@@ -320,16 +368,16 @@ private fun DocumentContent(
     ) {
 
         if (
-            savedPosition != null &&
-            savedPosition.chapterIndex ==
-                selectedChapter
+            savedPosition != null
         ) {
 
             listState.scrollToItem(
-                savedPosition.scrollIndex
+                savedPosition
+                    .scrollIndex
                     .coerceAtLeast(0),
 
-                savedPosition.scrollOffset
+                savedPosition
+                    .scrollOffset
                     .coerceAtLeast(0)
             )
         }
@@ -362,11 +410,82 @@ private fun DocumentContent(
         )
     }
 
+    val backgroundModifier =
+        when (
+            settings.theme
+        ) {
+
+            ReaderTheme.LIGHT ->
+                Modifier
+
+            ReaderTheme.DARK ->
+                Modifier
+
+            ReaderTheme.SEPIA ->
+                Modifier
+        }
+
+    val textColor =
+        when (
+            settings.theme
+        ) {
+
+            ReaderTheme.LIGHT ->
+                MaterialTheme
+                    .colorScheme
+                    .onBackground
+
+            ReaderTheme.DARK ->
+                MaterialTheme
+                    .colorScheme
+                    .onBackground
+
+            ReaderTheme.SEPIA ->
+                MaterialTheme
+                    .colorScheme
+                    .onBackground
+        }
+
+    val alignment =
+        when (
+            settings.textAlignment
+        ) {
+
+            ReaderTextAlignment.LEFT ->
+                TextAlign.Start
+
+            ReaderTextAlignment.JUSTIFY ->
+                TextAlign.Justify
+        }
+
+    val textStyle =
+        TextStyle(
+            fontSize =
+                settings.fontSize.sp,
+
+            lineHeight =
+                (
+                    settings.fontSize *
+                        settings.lineSpacing
+                    ).sp,
+
+            textAlign =
+                alignment,
+
+            color =
+                textColor
+        )
+
     LazyColumn(
-        state = listState,
+        state =
+            listState,
 
         modifier =
-            modifier.fillMaxSize(),
+            modifier
+                .fillMaxSize()
+                .then(
+                    backgroundModifier
+                ),
 
         verticalArrangement =
             Arrangement.spacedBy(
@@ -393,16 +512,15 @@ private fun DocumentContent(
                     style =
                         MaterialTheme
                             .typography
-                            .headlineMedium,
-
-                    fontWeight =
-                        FontWeight.Bold
+                            .headlineMedium
                 )
 
-                document.author?.let { author ->
+                document.author?.let {
+                    author ->
 
                     Text(
-                        text = author,
+                        text =
+                            author,
 
                         style =
                             MaterialTheme
@@ -438,10 +556,7 @@ private fun DocumentContent(
                     style =
                         MaterialTheme
                             .typography
-                            .titleLarge,
-
-                    fontWeight =
-                        FontWeight.SemiBold
+                            .titleLarge
                 )
 
                 Text(
@@ -449,9 +564,7 @@ private fun DocumentContent(
                         chapter.content,
 
                     style =
-                        MaterialTheme
-                            .typography
-                            .bodyLarge,
+                        textStyle,
 
                     modifier =
                         Modifier.padding(
