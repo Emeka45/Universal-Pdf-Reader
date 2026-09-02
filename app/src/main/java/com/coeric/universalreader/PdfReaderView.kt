@@ -3,6 +3,7 @@ package com.coeric.universalreader
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -12,17 +13,21 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,21 +35,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.max
-import kotlin.math.min
+import java.io.File
 
 @Composable
 fun PdfReaderView(
@@ -52,77 +57,124 @@ fun PdfReaderView(
 ) {
 
     val context =
-        LocalContext.current
+        androidx.compose.ui.platform.LocalContext.current
 
-    var currentPage by remember {
-        mutableIntStateOf(0)
+    val scope =
+        rememberCoroutineScope()
+
+    var renderer by remember {
+        mutableStateOf<PdfRenderer?>(null)
     }
 
-    var zoom by remember {
-        mutableFloatStateOf(1f)
+    var descriptor by remember {
+        mutableStateOf<ParcelFileDescriptor?>(null)
+    }
+
+    var temporaryFile by remember {
+        mutableStateOf<File?>(null)
     }
 
     var pageCount by remember {
         mutableIntStateOf(0)
     }
 
+    var currentPage by remember {
+        mutableIntStateOf(0)
+    }
+
+    var bitmap by remember {
+        mutableStateOf<Bitmap?>(null)
+    }
+
+    var zoom by remember {
+        mutableFloatStateOf(1f)
+    }
+
+    var offsetX by remember {
+        mutableFloatStateOf(0f)
+    }
+
+    var offsetY by remember {
+        mutableFloatStateOf(0f)
+    }
+
+    var showSearch by remember {
+        mutableStateOf(false)
+    }
+
+    var loading by remember {
+        mutableStateOf(true)
+    }
+
     var error by remember {
         mutableStateOf<String?>(null)
     }
 
-    var positionLoaded by remember {
-        mutableStateOf(false)
-    }
-
     LaunchedEffect(uri) {
+
+        loading =
+            true
+
+        error =
+            null
 
         try {
 
-            val savedPosition =
-                ReadingPositionRepository.get(
-                    context,
-                    uri.toString()
-                )
-
-            pageCount =
+            val file =
                 withContext(
                     Dispatchers.IO
                 ) {
 
-                    val descriptor =
-                        context
-                            .contentResolver
-                            .openFileDescriptor(
-                                uri,
-                                "r"
-                            )
-                            ?: throw IllegalArgumentException(
-                                "Unable to open PDF."
-                            )
+                    val target =
+                        File.createTempFile(
+                            "universal_reader_pdf_",
+                            ".pdf",
+                            context.cacheDir
+                        )
 
-                    descriptor.use {
+                    context
+                        .contentResolver
+                        .openInputStream(uri)
+                        ?.use { input ->
 
-                        PdfRenderer(it).use { renderer ->
+                            target
+                                .outputStream()
+                                .use { output ->
 
-                            renderer.pageCount
+                                    input.copyTo(
+                                        output,
+                                        64 * 1024
+                                    )
+                                }
                         }
-                    }
+                        ?: throw IllegalArgumentException(
+                            "Unable to open PDF."
+                        )
+
+                    target
                 }
 
-            if (
-                pageCount > 0 &&
-                savedPosition != null
-            ) {
+            temporaryFile =
+                file
 
-                currentPage =
-                    savedPosition.chapterIndex
-                        .coerceIn(
-                            0,
-                            pageCount - 1
-                        )
-            }
+            val fd =
+                ParcelFileDescriptor
+                    .open(
+                        file,
+                        ParcelFileDescriptor.MODE_READ_ONLY
+                    )
 
-            positionLoaded = true
+            descriptor =
+                fd
+
+            val pdf =
+                PdfRenderer(fd)
+
+            renderer =
+                pdf
+
+            pageCount =
+                pdf.pageCount
 
         } catch (
             exception: Exception
@@ -131,409 +183,504 @@ fun PdfReaderView(
             error =
                 exception.message
                     ?: "Unable to open PDF."
+
+        } finally {
+
+            loading =
+                false
         }
     }
-
-    val bitmapState =
-        produceState<Bitmap?>(
-            initialValue = null,
-            key1 = uri,
-            key2 = currentPage,
-            key3 = zoom
-        ) {
-
-            if (
-                pageCount <= 0 ||
-                !positionLoaded
-            ) {
-                value = null
-                return@produceState
-            }
-
-            value =
-                try {
-
-                    withContext(
-                        Dispatchers.IO
-                    ) {
-
-                        val descriptor =
-                            context
-                                .contentResolver
-                                .openFileDescriptor(
-                                    uri,
-                                    "r"
-                                )
-                                ?: return@withContext null
-
-                        descriptor.use {
-
-                            PdfRenderer(
-                                it
-                            ).use { renderer ->
-
-                                if (
-                                    currentPage !in
-                                    0 until renderer.pageCount
-                                ) {
-                                    return@use null
-                                }
-
-                                renderer
-                                    .openPage(
-                                        currentPage
-                                    )
-                                    .use { page ->
-
-                                        val width =
-                                            (
-                                                page.width *
-                                                    zoom
-                                            )
-                                                .toInt()
-                                                .coerceAtLeast(
-                                                    1
-                                                )
-
-                                        val height =
-                                            (
-                                                page.height *
-                                                    zoom
-                                            )
-                                                .toInt()
-                                                .coerceAtLeast(
-                                                    1
-                                                )
-
-                                        val bitmap =
-                                            Bitmap.createBitmap(
-                                                width,
-                                                height,
-                                                Bitmap.Config.ARGB_8888
-                                            )
-
-                                        page.render(
-                                            bitmap,
-                                            null,
-                                            null,
-                                            PdfRenderer
-                                                .Page
-                                                .RENDER_MODE_FOR_DISPLAY
-                                        )
-
-                                        bitmap
-                                    }
-                            }
-                        }
-                    }
-
-                } catch (
-                    exception: Exception
-                ) {
-
-                    error =
-                        exception.message
-                            ?: "Unable to render PDF page."
-
-                    null
-                }
-        }
 
     LaunchedEffect(
-        currentPage,
-        pageCount,
-        positionLoaded
+        renderer,
+        currentPage
     ) {
 
+        val pdf =
+            renderer
+                ?: return@LaunchedEffect
+
         if (
-            positionLoaded &&
-            pageCount > 0
+            currentPage !in
+            0 until pdf.pageCount
         ) {
+            return@LaunchedEffect
+        }
 
-            ReadingPositionRepository.save(
+        loading =
+            true
 
-                context,
+        bitmap =
+            withContext(
+                Dispatchers.IO
+            ) {
 
-                ReadingPosition(
-                    documentUri =
-                        uri.toString(),
+                val page =
+                    pdf.openPage(
+                        currentPage
+                    )
 
-                    chapterIndex =
-                        currentPage,
+                try {
 
-                    scrollIndex =
-                        0,
+                    val width =
+                        (
+                            page.width *
+                                2f
+                        ).toInt()
 
-                    scrollOffset =
-                        0
-                )
-            )
+                    val height =
+                        (
+                            page.height *
+                                2f
+                        ).toInt()
+
+                    Bitmap.createBitmap(
+                        width,
+                        height,
+                        Bitmap.Config.ARGB_8888
+                    ).also { result ->
+
+                        page.render(
+                            result,
+                            null,
+                            null,
+                            PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
+                        )
+                    }
+
+                } finally {
+
+                    page.close()
+                }
+            }
+
+        zoom =
+            1f
+
+        offsetX =
+            0f
+
+        offsetY =
+            0f
+
+        loading =
+            false
+    }
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+
+        onDispose {
+
+            renderer?.close()
+            descriptor?.close()
+            temporaryFile?.delete()
         }
     }
 
-    when {
+    Surface(
+        modifier =
+            Modifier.fillMaxSize()
+    ) {
 
-        error != null -> {
+        Column(
+            modifier =
+                Modifier.fillMaxSize()
+        ) {
 
-            PdfErrorScreen(
-                message =
-                    error
-                        ?: "Unable to open PDF."
+            PdfToolbar(
+                currentPage =
+                    currentPage,
+
+                pageCount =
+                    pageCount,
+
+                zoom =
+                    zoom,
+
+                onSearch = {
+                    showSearch = true
+                },
+
+                onZoomIn = {
+
+                    zoom =
+                        (
+                            zoom + 0.25f
+                        ).coerceAtMost(
+                            4f
+                        )
+                },
+
+                onZoomOut = {
+
+                    zoom =
+                        (
+                            zoom - 0.25f
+                        ).coerceAtLeast(
+                            1f
+                        )
+
+                    if (
+                        zoom == 1f
+                    ) {
+
+                        offsetX =
+                            0f
+
+                        offsetY =
+                            0f
+                    }
+                }
             )
-        }
-
-        pageCount == 0 ||
-        !positionLoaded -> {
 
             Box(
                 modifier =
-                    Modifier.fillMaxSize(),
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme
+                                .colorScheme
+                                .surfaceVariant
+                        ),
 
                 contentAlignment =
                     Alignment.Center
             ) {
 
-                CircularProgressIndicator()
-            }
-        }
+                when {
 
-        else -> {
+                    error != null -> {
 
-            val safePage =
-                currentPage.coerceIn(
-                    0,
-                    pageCount - 1
-                )
+                        Text(
+                            text =
+                                error
+                                    ?: "Unable to open PDF.",
 
-            val bitmap =
-                bitmapState.value
-
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .background(
-                            MaterialTheme
-                                .colorScheme
-                                .background
-                        )
-            ) {
-
-                Row(
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
-                    verticalAlignment =
-                        Alignment.CenterVertically,
-
-                    horizontalArrangement =
-                        Arrangement.SpaceBetween
-                ) {
-
-                    IconButton(
-                        onClick = {
-
-                            if (
-                                safePage > 0
-                            ) {
-
-                                currentPage--
-
-                                zoom = 1f
-                            }
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default
-                                    .KeyboardArrowLeft,
-
-                            contentDescription =
-                                "Previous page"
-                        )
-                    }
-
-                    Text(
-                        text =
-                            "${safePage + 1} / $pageCount",
-
-                        style =
-                            MaterialTheme
-                                .typography
-                                .titleMedium
-                    )
-
-                    IconButton(
-                        onClick = {
-
-                            if (
-                                safePage <
-                                pageCount - 1
-                            ) {
-
-                                currentPage++
-
-                                zoom = 1f
-                            }
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default
-                                    .KeyboardArrowRight,
-
-                            contentDescription =
-                                "Next page"
-                        )
-                    }
-                }
-
-                LinearProgressIndicator(
-                    progress = {
-
-                        (
-                            (safePage + 1).toFloat() /
-                                pageCount.toFloat()
-                        ).coerceIn(
-                            0f,
-                            1f
-                        )
-                    },
-
-                    modifier =
-                        Modifier.fillMaxWidth()
-                )
-
-                Row(
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
-                    horizontalArrangement =
-                        Arrangement.Center,
-
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    IconButton(
-                        onClick = {
-
-                            zoom =
-                                max(
-                                    1f,
-                                    zoom - 0.25f
+                            modifier =
+                                Modifier.padding(
+                                    24.dp
                                 )
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.ZoomOut,
-
-                            contentDescription =
-                                "Zoom out"
                         )
                     }
 
-                    Text(
-                        text =
-                            "${(zoom * 100).toInt()}%"
-                    )
-
-                    IconButton(
-                        onClick = {
-
-                            zoom =
-                                min(
-                                    4f,
-                                    zoom + 0.25f
-                                )
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.ZoomIn,
-
-                            contentDescription =
-                                "Zoom in"
-                        )
-                    }
-                }
-
-                if (
-                    bitmap == null
-                ) {
-
-                    Box(
-                        modifier =
-                            Modifier.fillMaxSize(),
-
-                        contentAlignment =
-                            Alignment.Center
-                    ) {
+                    loading -> {
 
                         CircularProgressIndicator()
                     }
 
-                } else {
+                    bitmap != null -> {
 
-                    LazyColumn(
-                        modifier =
-                            Modifier.fillMaxSize()
-                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .pointerInput(
+                                        zoom
+                                    ) {
 
-                        item {
+                                        detectTransformGestures {
+                                                _,
+                                                pan,
+                                                scale,
+                                                _ ->
+
+                                            zoom =
+                                                (
+                                                    zoom *
+                                                        scale
+                                                ).coerceIn(
+                                                    1f,
+                                                    4f
+                                                )
+
+                                            if (
+                                                zoom > 1f
+                                            ) {
+
+                                                offsetX +=
+                                                    pan.x
+
+                                                offsetY +=
+                                                    pan.y
+
+                                            } else {
+
+                                                offsetX =
+                                                    0f
+
+                                                offsetY =
+                                                    0f
+                                            }
+                                        }
+                                    }
+                                    .verticalScroll(
+                                        rememberScrollState()
+                                    )
+                        ) {
 
                             Image(
                                 bitmap =
-                                    bitmap.asImageBitmap(),
+                                    bitmap!!
+                                        .asImageBitmap(),
 
                                 contentDescription =
-                                    "PDF page ${safePage + 1}",
+                                    "PDF page ${currentPage + 1}",
 
                                 contentScale =
-                                    ContentScale.FillWidth,
+                                    ContentScale.Fit,
 
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
-                                        .scale(1f)
-                                        .pointerInput(
-                                            zoom
-                                        ) {
+                                        .wrapContentHeight()
+                                        .graphicsLayer {
 
-                                            detectTransformGestures {
-                                                _, _, _, _ ->
-                                            }
+                                            scaleX =
+                                                zoom
+
+                                            scaleY =
+                                                zoom
+
+                                            translationX =
+                                                offsetX
+
+                                            translationY =
+                                                offsetY
                                         }
                             )
                         }
                     }
                 }
             }
+
+            PdfNavigationBar(
+                currentPage =
+                    currentPage,
+
+                pageCount =
+                    pageCount,
+
+                onPrevious = {
+
+                    if (
+                        currentPage > 0
+                    ) {
+
+                        currentPage--
+                    }
+                },
+
+                onNext = {
+
+                    if (
+                        currentPage <
+                        pageCount - 1
+                    ) {
+
+                        currentPage++
+                    }
+                }
+            )
+        }
+    }
+
+    if (
+        showSearch
+    ) {
+
+        Dialog(
+            onDismissRequest = {
+                showSearch = false
+            }
+        ) {
+
+            Surface(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+
+                shape =
+                    MaterialTheme
+                        .shapes
+                        .large
+            ) {
+
+                PdfSearchPanel(
+                    uri = uri,
+
+                    onClose = {
+                        showSearch = false
+                    },
+
+                    onResultSelected = {
+                        page ->
+
+                        currentPage =
+                            page
+
+                        showSearch =
+                            false
+                    }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun PdfErrorScreen(
-    message: String
+private fun PdfToolbar(
+    currentPage: Int,
+    pageCount: Int,
+    zoom: Float,
+    onSearch: () -> Unit,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit
 ) {
 
-    Box(
+    Row(
         modifier =
-            Modifier.fillMaxSize(),
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 8.dp,
+                    vertical = 4.dp
+                ),
 
-        contentAlignment =
-            Alignment.Center
+        verticalAlignment =
+            Alignment.CenterVertically,
+
+        horizontalArrangement =
+            Arrangement.SpaceBetween
     ) {
 
         Text(
             text =
-                message
+                if (pageCount > 0) {
+                    "${currentPage + 1} / $pageCount"
+                } else {
+                    "PDF"
+                },
+
+            style =
+                MaterialTheme
+                    .typography
+                    .titleMedium
         )
+
+        Row {
+
+            IconButton(
+                onClick =
+                    onSearch
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Default.Search,
+
+                    contentDescription =
+                        "Search PDF"
+                )
+            }
+
+            IconButton(
+                onClick =
+                    onZoomOut
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Default.ZoomOut,
+
+                    contentDescription =
+                        "Zoom out"
+                )
+            }
+
+            Text(
+                text =
+                    "${(zoom * 100).toInt()}%",
+
+                modifier =
+                    Modifier.padding(
+                        horizontal = 4.dp
+                    )
+            )
+
+            IconButton(
+                onClick =
+                    onZoomIn
+            ) {
+
+                Icon(
+                    imageVector =
+                        Icons.Default.ZoomIn,
+
+                    contentDescription =
+                        "Zoom in"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PdfNavigationBar(
+    currentPage: Int,
+    pageCount: Int,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit
+) {
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+
+        horizontalArrangement =
+            Arrangement.SpaceBetween,
+
+        verticalAlignment =
+            Alignment.CenterVertically
+    ) {
+
+        androidx.compose.material3.Button(
+            onClick =
+                onPrevious,
+
+            enabled =
+                currentPage > 0
+        ) {
+
+            Text(
+                text = "Previous"
+            )
+        }
+
+        Text(
+            text =
+                if (pageCount > 0) {
+                    "Page ${currentPage + 1}"
+                } else {
+                    ""
+                }
+        )
+
+        androidx.compose.material3.Button(
+            onClick =
+                onNext,
+
+            enabled =
+                currentPage <
+                    pageCount - 1
+        ) {
+
+            Text(
+                text = "Next"
+            )
+        }
     }
 }
