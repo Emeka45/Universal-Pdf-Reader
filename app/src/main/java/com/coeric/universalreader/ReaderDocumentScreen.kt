@@ -90,6 +90,7 @@ fun ReaderDocumentScreen(
 
             ChapterList(
                 document = document,
+
                 modifier =
                     Modifier.padding(
                         paddingValues
@@ -100,6 +101,7 @@ fun ReaderDocumentScreen(
 
             DocumentContent(
                 document = document,
+
                 modifier =
                     Modifier.padding(
                         paddingValues
@@ -265,7 +267,7 @@ private fun DocumentContent(
                     modifier =
                         Modifier.padding(
                             top = 10.dp,
-                           bottom = 10.dp
+                            bottom = 10.dp
                         )
                 )
             }
