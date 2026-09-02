@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -67,10 +68,15 @@ class ReaderActivity : ComponentActivity() {
 
             MaterialTheme {
 
-                if (documentUri != null) {
+                if (
+                    documentUri != null
+                ) {
 
                     ReaderScreen(
-                        uri = Uri.parse(documentUri),
+                        uri =
+                            Uri.parse(
+                                documentUri
+                            ),
                         onBack = {
                             finish()
                         }
@@ -139,22 +145,18 @@ fun ReaderScreen(
     val context =
         LocalContext.current
 
-    val extension =
+    val format =
         remember(uri) {
 
-            uri.toString()
-                .substringBefore("?")
-                .substringBefore("#")
-                .substringAfterLast(
-                    '.',
-                    ""
-                )
-                .lowercase()
+            DocumentFormatDetector.detect(
+                context,
+                uri
+            )
         }
 
-    when (extension) {
+    when (format) {
 
-        "pdf" -> {
+        DocumentFormat.PDF -> {
 
             Scaffold(
 
@@ -203,13 +205,27 @@ fun ReaderScreen(
             }
         }
 
-        "epub" -> {
+        DocumentFormat.EPUB -> {
 
             EpubReaderScreen(
                 context =
                     context,
                 uri =
                     uri,
+                onBack =
+                    onBack
+            )
+        }
+
+        DocumentFormat.MOBI,
+        DocumentFormat.AZW,
+        DocumentFormat.AZW3 -> {
+
+            MobiReaderScreen(
+                uri =
+                    uri,
+                format =
+                    format,
                 onBack =
                     onBack
             )
@@ -411,11 +427,16 @@ private fun EpubReaderScreen(
         mutableStateOf(false)
     }
 
-    var fontSize by remember {
-        mutableFloatStateOf(18f)
+    var settings by remember {
+
+        mutableStateOf(
+            ReaderSettingsRepository.load(
+                context
+            )
+        )
     }
 
-    var showFontControls by remember {
+    var showSettings by remember {
         mutableStateOf(false)
     }
 
@@ -467,6 +488,13 @@ private fun EpubReaderScreen(
 
                             showTableOfContents =
                                 !showTableOfContents
+
+                            if (
+                                showTableOfContents
+                            ) {
+                                showSettings =
+                                    false
+                            }
                         }
                     ) {
 
@@ -481,8 +509,15 @@ private fun EpubReaderScreen(
                     IconButton(
                         onClick = {
 
-                            showFontControls =
-                                !showFontControls
+                            showSettings =
+                                !showSettings
+
+                            if (
+                                showSettings
+                            ) {
+                                showTableOfContents =
+                                    false
+                            }
                         }
                     ) {
 
@@ -490,7 +525,7 @@ private fun EpubReaderScreen(
                             imageVector =
                                 Icons.Default.TextIncrease,
                             contentDescription =
-                                "Font size"
+                                "Reader settings"
                         )
                     }
                 }
@@ -508,35 +543,25 @@ private fun EpubReaderScreen(
                     )
         ) {
 
-            if (showFontControls) {
+            if (showSettings) {
 
-                Column(
-                    modifier =
-                        Modifier.padding(
-                            horizontal = 20.dp,
-                            vertical = 8.dp
-                        )
-                ) {
+                ReaderSettingsPanel(
 
-                    Text(
-                        text =
-                            "Text Size",
-                        style =
-                            MaterialTheme
-                                .typography
-                                .labelLarge
-                    )
+                    settings =
+                        settings,
 
-                    Slider(
-                        value =
-                            fontSize,
-                        onValueChange = {
-                            fontSize = it
-                        },
-                        valueRange =
-                            12f..32f
-                    )
-                }
+                    onSettingsChanged = { newSettings ->
+
+                        settings =
+                            newSettings
+
+                        ReaderSettingsRepository
+                            .save(
+                                context,
+                                newSettings
+                            )
+                    }
+                )
             }
 
             if (showTableOfContents) {
@@ -580,8 +605,8 @@ private fun EpubReaderScreen(
                     chapterIndex =
                         currentChapter,
 
-                    fontSize =
-                        fontSize,
+                    settings =
+                        settings,
 
                     onPrevious = {
 
@@ -672,6 +697,7 @@ private fun TableOfContents(
                             vertical = 4.dp
                         ),
                 onClick = {
+
                     onChapterSelected(
                         index
                     )
@@ -717,15 +743,24 @@ private fun ChapterContent(
     document: EpubDocument,
     chapter: EpubChapter,
     chapterIndex: Int,
-    fontSize: Float,
+    settings: ReaderSettings,
     onPrevious: () -> Unit,
     onNext: () -> Unit
 ) {
 
+    val textAlignment =
+        if (
+            settings.textAlignment ==
+            ReaderTextAlignment.JUSTIFY
+        ) {
+            TextAlign.Justify
+        } else {
+            TextAlign.Left
+        }
+
     Column(
         modifier =
-            Modifier
-                .fillMaxSize()
+            Modifier.fillMaxSize()
     ) {
 
         Column(
@@ -783,9 +818,14 @@ private fun ChapterContent(
                 text =
                     chapter.content,
                 fontSize =
-                    fontSize.sp,
+                    settings.fontSize.sp,
                 lineHeight =
-                    (fontSize * 1.55f).sp
+                    (
+                        settings.fontSize *
+                            settings.lineSpacing
+                        ).sp,
+                textAlign =
+                    textAlignment
             )
 
             Spacer(
@@ -883,11 +923,16 @@ private fun TextReaderScreen(
     val context =
         LocalContext.current
 
-    var fontSize by remember {
-        mutableFloatStateOf(18f)
+    var settings by remember {
+
+        mutableStateOf(
+            ReaderSettingsRepository.load(
+                context
+            )
+        )
     }
 
-    var showFontControls by remember {
+    var showSettings by remember {
         mutableStateOf(false)
     }
 
@@ -924,6 +969,16 @@ private fun TextReaderScreen(
             }
         }
 
+    val textAlignment =
+        if (
+            settings.textAlignment ==
+            ReaderTextAlignment.JUSTIFY
+        ) {
+            TextAlign.Justify
+        } else {
+            TextAlign.Left
+        }
+
     Scaffold(
 
         topBar = {
@@ -957,8 +1012,8 @@ private fun TextReaderScreen(
                     IconButton(
                         onClick = {
 
-                            showFontControls =
-                                !showFontControls
+                            showSettings =
+                                !showSettings
                         }
                     ) {
 
@@ -966,7 +1021,7 @@ private fun TextReaderScreen(
                             imageVector =
                                 Icons.Default.TextIncrease,
                             contentDescription =
-                                "Font size"
+                                "Reader settings"
                         )
                     }
                 }
@@ -984,35 +1039,25 @@ private fun TextReaderScreen(
                     )
         ) {
 
-            if (showFontControls) {
+            if (showSettings) {
 
-                Column(
-                    modifier =
-                        Modifier.padding(
-                            horizontal = 20.dp,
-                            vertical = 8.dp
-                        )
-                ) {
+                ReaderSettingsPanel(
 
-                    Text(
-                        text =
-                            "Text Size",
-                        style =
-                            MaterialTheme
-                                .typography
-                                .labelLarge
-                    )
+                    settings =
+                        settings,
 
-                    Slider(
-                        value =
-                            fontSize,
-                        onValueChange = {
-                            fontSize = it
-                        },
-                        valueRange =
-                            12f..32f
-                    )
-                }
+                    onSettingsChanged = { newSettings ->
+
+                        settings =
+                            newSettings
+
+                        ReaderSettingsRepository
+                            .save(
+                                context,
+                                newSettings
+                            )
+                    }
+                )
             }
 
             Column(
@@ -1031,9 +1076,14 @@ private fun TextReaderScreen(
                     text =
                         documentText.value,
                     fontSize =
-                        fontSize.sp,
+                        settings.fontSize.sp,
                     lineHeight =
-                        (fontSize * 1.55f).sp
+                        (
+                            settings.fontSize *
+                                settings.lineSpacing
+                            ).sp,
+                    textAlign =
+                        textAlignment
                 )
             }
         }
