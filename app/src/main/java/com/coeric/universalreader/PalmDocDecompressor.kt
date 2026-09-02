@@ -32,10 +32,7 @@ object PalmDocDecompressor {
 
                 value in 1..8 -> {
 
-                    val count =
-                        value
-
-                    repeat(count) {
+                    repeat(value) {
 
                         if (
                             position <
@@ -52,14 +49,14 @@ object PalmDocDecompressor {
                     }
                 }
 
-                value in 0x09..0x7F -> {
+                value in 9..127 -> {
 
                     output.write(
                         value
                     )
                 }
 
-                value in 0x80..0xBF -> {
+                value in 128..191 -> {
 
                     if (
                         position >=
@@ -76,8 +73,9 @@ object PalmDocDecompressor {
 
                     val distance =
                         (
-                            (value and 0x3F)
-                                shl 5
+                            (
+                                value and 0x3F
+                            ) shl 5
                         ) or
                             (
                                 next shr 3
@@ -95,7 +93,7 @@ object PalmDocDecompressor {
                     )
                 }
 
-                value in 0xC0..0xFF -> {
+                else -> {
 
                     output.write(
                         ' '.code
@@ -123,22 +121,13 @@ object PalmDocDecompressor {
             return
         }
 
-        val current =
-            output.toByteArray()
-
-        var source =
-            current.size - distance
-
-        if (
-            source < 0
-        ) {
-            return
-        }
-
         repeat(length) {
 
             val data =
                 output.toByteArray()
+
+            val source =
+                data.size - distance
 
             if (
                 source < 0 ||
@@ -151,8 +140,6 @@ object PalmDocDecompressor {
                 data[source]
                     .toInt()
             )
-
-            source++
         }
     }
 }
