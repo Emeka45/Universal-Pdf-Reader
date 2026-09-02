@@ -11,13 +11,9 @@ android {
 
     defaultConfig {
         applicationId = "com.coeric.universalreader"
-
         minSdk = 26
-
         targetSdk = 36
-
         versionCode = 1
-
         versionName = "1.0"
     }
 
@@ -74,11 +70,12 @@ dependencies {
         "androidx.compose.material:material-icons-extended"
     )
 
-    /*
-     * CBR / RAR support
-     */
     implementation(
         "com.github.junrar:junrar:8.1.0"
+    )
+
+    implementation(
+        "com.tom-roush:pdfbox-android:2.0.27.0"
     )
 
     debugImplementation(
