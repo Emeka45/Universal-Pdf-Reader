@@ -1,14 +1,15 @@
 package com.coeric.universalreader
 
 import android.content.Context
+import org.json.JSONArray
 import org.json.JSONObject
 
 object ReadingPositionRepository {
 
-    private const val PREFS_NAME =
+    private const val PREFS =
         "universal_reader_positions"
 
-    private const val KEY_POSITIONS =
+    private const val POSITIONS =
         "positions"
 
     fun save(
@@ -16,46 +17,72 @@ object ReadingPositionRepository {
         position: ReadingPosition
     ) {
 
-        val preferences =
-            context.getSharedPreferences(
-                PREFS_NAME,
+        val allPositions =
+            getAll(context)
+                .toMutableList()
+
+        val existingIndex =
+            allPositions.indexOfFirst {
+                it.documentUri ==
+                    position.documentUri
+            }
+
+        if (
+            existingIndex >= 0
+        ) {
+
+            allPositions[existingIndex] =
+                position
+
+        } else {
+
+            allPositions.add(
+                position
+            )
+        }
+
+        val array =
+            JSONArray()
+
+        for (
+            item in allPositions
+        ) {
+
+            val json =
+                JSONObject()
+
+            json.put(
+                "documentUri",
+                item.documentUri
+            )
+
+            json.put(
+                "chapterIndex",
+                item.chapterIndex
+            )
+
+            json.put(
+                "scrollIndex",
+                item.scrollIndex
+            )
+
+            json.put(
+                "scrollOffset",
+                item.scrollOffset
+            )
+
+            array.put(json)
+        }
+
+        context
+            .getSharedPreferences(
+                PREFS,
                 Context.MODE_PRIVATE
             )
-
-        val existing =
-            JSONObject(
-                preferences.getString(
-                    KEY_POSITIONS,
-                    "{}"
-                ) ?: "{}"
-            )
-
-        existing.put(
-            position.documentUri,
-            JSONObject().apply {
-
-                put(
-                    "chapterIndex",
-                    position.chapterIndex
-                )
-
-                put(
-                    "scrollIndex",
-                    position.scrollIndex
-                )
-
-                put(
-                    "scrollOffset",
-                    position.scrollOffset
-                )
-            }
-        )
-
-        preferences
             .edit()
             .putString(
-                KEY_POSITIONS,
-                existing.toString()
+                POSITIONS,
+                array.toString()
             )
             .apply()
     }
@@ -65,55 +92,11 @@ object ReadingPositionRepository {
         documentUri: String
     ): ReadingPosition? {
 
-        val preferences =
-            context.getSharedPreferences(
-                PREFS_NAME,
-                Context.MODE_PRIVATE
-            )
-
-        val positions =
-            JSONObject(
-                preferences.getString(
-                    KEY_POSITIONS,
-                    "{}"
-                ) ?: "{}"
-            )
-
-        if (
-            !positions.has(
-                documentUri
-            )
-        ) {
-            return null
-        }
-
-        val value =
-            positions.getJSONObject(
-                documentUri
-            )
-
-        return ReadingPosition(
-            documentUri =
-                documentUri,
-
-            chapterIndex =
-                value.optInt(
-                    "chapterIndex",
-                    0
-                ),
-
-            scrollIndex =
-                value.optInt(
-                    "scrollIndex",
-                    0
-                ),
-
-            scrollOffset =
-                value.optInt(
-                    "scrollOffset",
-                    0
-                )
-        )
+        return getAll(context)
+            .firstOrNull {
+                it.documentUri ==
+                    documentUri
+            }
     }
 
     fun remove(
@@ -121,30 +104,127 @@ object ReadingPositionRepository {
         documentUri: String
     ) {
 
-        val preferences =
-            context.getSharedPreferences(
-                PREFS_NAME,
+        val remaining =
+            getAll(context)
+                .filter {
+                    it.documentUri !=
+                        documentUri
+                }
+
+        val array =
+            JSONArray()
+
+        for (
+            item in remaining
+        ) {
+
+            val json =
+                JSONObject()
+
+            json.put(
+                "documentUri",
+                item.documentUri
+            )
+
+            json.put(
+                "chapterIndex",
+                item.chapterIndex
+            )
+
+            json.put(
+                "scrollIndex",
+                item.scrollIndex
+            )
+
+            json.put(
+                "scrollOffset",
+                item.scrollOffset
+            )
+
+            array.put(json)
+        }
+
+        context
+            .getSharedPreferences(
+                PREFS,
                 Context.MODE_PRIVATE
             )
-
-        val positions =
-            JSONObject(
-                preferences.getString(
-                    KEY_POSITIONS,
-                    "{}"
-                ) ?: "{}"
-            )
-
-        positions.remove(
-            documentUri
-        )
-
-        preferences
             .edit()
             .putString(
-                KEY_POSITIONS,
-                positions.toString()
+                POSITIONS,
+                array.toString()
             )
             .apply()
+    }
+
+    private fun getAll(
+        context: Context
+    ): List<ReadingPosition> {
+
+        val json =
+            context
+                .getSharedPreferences(
+                    PREFS,
+                    Context.MODE_PRIVATE
+                )
+                .getString(
+                    POSITIONS,
+                    null
+                )
+                ?: return emptyList()
+
+        return try {
+
+            val array =
+                JSONArray(json)
+
+            val result =
+                mutableListOf<ReadingPosition>()
+
+            for (
+                index in 0 until array.length()
+            ) {
+
+                val item =
+                    array.getJSONObject(index)
+
+                result.add(
+
+                    ReadingPosition(
+
+                        documentUri =
+                            item.optString(
+                                "documentUri"
+                            ),
+
+                        chapterIndex =
+                            item.optInt(
+                                "chapterIndex",
+                                0
+                            ),
+
+                        scrollIndex =
+                            item.optInt(
+                                "scrollIndex",
+                                0
+                            ),
+
+                        scrollOffset =
+                            item.optInt(
+                                "scrollOffset",
+                                0
+                            )
+                    )
+                )
+            }
+
+            result
+
+        } catch (
+            exception: Exception
+        ) {
+
+            emptyList()
+        }
     }
 }
