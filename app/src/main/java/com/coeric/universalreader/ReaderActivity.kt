@@ -28,7 +28,8 @@ class ReaderActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val uri =
-            intent.getStringExtra("uri")
+            intent
+                .getStringExtra("uri")
                 ?.let {
                     Uri.parse(it)
                 }
@@ -123,6 +124,13 @@ private fun ReaderContent(
         format == DocumentFormat.CBR -> {
 
             CbrReaderContent(
+                uri = uri
+            )
+        }
+
+        format == DocumentFormat.ZIP -> {
+
+            RoutedDocumentContent(
                 uri = uri
             )
         }
@@ -357,8 +365,7 @@ private fun ErrorScreen(
     ) {
 
         Text(
-            text =
-                message,
+            text = message,
 
             modifier =
                 Modifier.padding(
