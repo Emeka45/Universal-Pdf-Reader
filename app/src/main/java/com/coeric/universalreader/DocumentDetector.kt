@@ -17,8 +17,12 @@ object DocumentDetector {
             null,
             null
         )?.use { cursor ->
+
             if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+
+                val index = cursor.getColumnIndex(
+                    OpenableColumns.DISPLAY_NAME
+                )
 
                 if (index >= 0) {
                     name = cursor.getString(index)
