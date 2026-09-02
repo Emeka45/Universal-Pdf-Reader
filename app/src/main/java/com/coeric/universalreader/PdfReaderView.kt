@@ -43,7 +43,7 @@ data class PdfPage(
 
 @Composable
 fun PdfReaderView(
-    context: Context,
+    context:Context,
     uri: Uri,
     modifier: Modifier = Modifier
 ) {
