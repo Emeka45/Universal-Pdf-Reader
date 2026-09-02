@@ -1,26 +1,13 @@
-
 package com.coeric.universalreader
 
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import android.net.Uri
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,439 +15,349 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ReaderDocumentScreen(
-    document: ReaderDocument,
-    documentUri: String
-) {
+class ReaderActivity : ComponentActivity() {
 
-    val context =
-        androidx.compose.ui.platform.LocalContext.current
+    override fun onCreate(
+        savedInstanceState: Bundle?
+    ) {
+        super.onCreate(savedInstanceState)
 
-    val backDispatcher =
-        LocalOnBackPressedDispatcherOwner.current
-            ?.onBackPressedDispatcher
-
-    val savedPosition =
-        remember(documentUri) {
-
-            ReadingPositionRepository.get(
-                context,
-                documentUri
-            )
-        }
-
-    var showChapterList by remember {
-        mutableStateOf(false)
-    }
-
-    var selectedChapter by remember {
-
-        mutableStateOf(
-            savedPosition?.chapterIndex
-                ?.coerceIn(
-                    0,
-                    (document.chapters.size - 1)
-                        .coerceAtLeast(0)
-                )
-                ?: 0
-        )
-    }
-
-    BackHandler {
-
-        if (showChapterList) {
-
-            showChapterList = false
-
-        } else {
-
-            backDispatcher?.onBackPressed()
-        }
-    }
-
-    Scaffold(
-        topBar = {
-
-            CenterAlignedTopAppBar(
-
-                title = {
-
-                    Text(
-                        text = document.title,
-                        maxLines = 1
-                    )
-                },
-
-                navigationIcon = {
-
-                    IconButton(
-                        onClick = {
-
-                            if (
-                                showChapterList
-                            ) {
-
-                                showChapterList =
-                                    false
-
-                            } else {
-
-                                backDispatcher
-                                    ?.onBackPressed()
-                            }
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.ArrowBack,
-
-                            contentDescription =
-                                "Back"
-                        )
-                    }
-                },
-
-                actions = {
-
-                    IconButton(
-                        onClick = {
-
-                            showChapterList =
-                                !showChapterList
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.Menu,
-
-                            contentDescription =
-                                "Chapters"
-                        )
-                    }
+        val uri =
+            intent.getStringExtra("uri")
+                ?.let {
+                    Uri.parse(it)
                 }
-            )
+                ?: intent.data
+
+        if (uri == null) {
+            finish()
+            return
         }
-    ) { paddingValues ->
 
-        if (showChapterList) {
-
-            ChapterList(
-                document = document,
-
-                selectedChapter =
-                    selectedChapter,
-
-                onChapterSelected = { index ->
-
-                    selectedChapter =
-                        index
-
-                    ReadingPositionRepository.save(
-                        context,
-                        ReadingPosition(
-                            documentUri =
-                                documentUri,
-
-                            chapterIndex =
-                                index,
-
-                            scrollIndex =
-                                0,
-
-                            scrollOffset =
-                                0
-                        )
-                    )
-
-                    showChapterList =
-                        false
-                },
-
-                modifier =
-                    Modifier.padding(
-                        paddingValues
-                    )
-            )
-
-        } else {
-
-            DocumentContent(
-                document = document,
-
-                selectedChapter =
-                    selectedChapter,
-
-                documentUri =
-                    documentUri,
-
-                modifier =
-                    Modifier.padding(
-                        paddingValues
-                    )
+        setContent {
+            ReaderContent(
+                uri = uri
             )
         }
     }
 }
 
 @Composable
-private fun ChapterList(
-    document: ReaderDocument,
-    selectedChapter: Int,
-    onChapterSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-
-    LazyColumn(
-        modifier =
-            modifier.fillMaxSize(),
-
-        verticalArrangement =
-            Arrangement.spacedBy(
-                2.dp
-            )
-    ) {
-
-        item {
-
-            Text(
-                text = "Chapters",
-
-                style =
-                    MaterialTheme
-                        .typography
-                        .headlineSmall,
-
-                fontWeight =
-                    FontWeight.Bold,
-
-                modifier =
-                    Modifier.padding(
-                        horizontal = 20.dp,
-                        vertical = 16.dp
-                    )
-            )
-        }
-
-        itemsIndexed(
-            document.chapters
-        ) { index, chapter ->
-
-            Text(
-                text =
-                    "${index + 1}. ${chapter.title}",
-
-                style =
-                    MaterialTheme
-                        .typography
-                        .bodyLarge,
-
-                fontWeight =
-                    if (
-                        index ==
-                        selectedChapter
-                    ) {
-
-                        FontWeight.Bold
-
-                    } else {
-
-                        FontWeight.Normal
-                    },
-
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable {
-
-                            onChapterSelected(
-                                index
-                            )
-                        }
-                        .padding(
-                            horizontal = 20.dp,
-                            vertical = 16.dp
-                        )
-            )
-        }
-    }
-}
-
-@Composable
-private fun DocumentContent(
-    document: ReaderDocument,
-    selectedChapter: Int,
-    documentUri: String,
-    modifier: Modifier = Modifier
+private fun ReaderContent(
+    uri: Uri
 ) {
 
     val context =
-        androidx.compose.ui.platform.LocalContext.current
+        LocalContext.current
 
-    val listState =
-        rememberLazyListState()
+    var format by remember {
+        mutableStateOf<DocumentFormat?>(null)
+    }
 
-    val savedPosition =
-        remember(documentUri) {
+    var error by remember {
+        mutableStateOf<String?>(null)
+    }
 
-            ReadingPositionRepository.get(
-                context,
-                documentUri
-            )
-        }
+    LaunchedEffect(uri) {
 
-    LaunchedEffect(
-        savedPosition
-    ) {
+        try {
 
-        if (
-            savedPosition != null &&
-            savedPosition.chapterIndex ==
-                selectedChapter
+            format =
+                DocumentFormatDetector.detect(
+                    context,
+                    uri
+                )
+
+        } catch (
+            exception: Exception
         ) {
 
-            listState.scrollToItem(
-                savedPosition.scrollIndex
-                    .coerceAtLeast(0),
-
-                savedPosition.scrollOffset
-                    .coerceAtLeast(0)
-            )
+            error =
+                exception.message
+                    ?: "Unable to detect document format."
         }
     }
 
-    LaunchedEffect(
-        listState.firstVisibleItemIndex,
-        listState.firstVisibleItemScrollOffset,
-        selectedChapter
-    ) {
+    when {
 
-        ReadingPositionRepository.save(
-            context,
+        error != null -> {
 
-            ReadingPosition(
-                documentUri =
-                    documentUri,
-
-                chapterIndex =
-                    selectedChapter,
-
-                scrollIndex =
-                    listState
-                        .firstVisibleItemIndex,
-
-                scrollOffset =
-                    listState
-                        .firstVisibleItemScrollOffset
+            ErrorScreen(
+                message =
+                    error
+                        ?: "Unable to open document."
             )
-        )
+        }
+
+        format == null -> {
+
+            LoadingScreen()
+        }
+
+        format == DocumentFormat.PDF -> {
+
+            PdfReaderView(
+                uri = uri
+            )
+        }
+
+        format == DocumentFormat.EPUB -> {
+
+            EpubReaderScreen(
+                uri = uri
+            )
+        }
+
+        format == DocumentFormat.CBZ -> {
+
+            CbzReaderContent(
+                uri = uri
+            )
+        }
+
+        format == DocumentFormat.CBR -> {
+
+            CbrReaderContent(
+                uri = uri
+            )
+        }
+
+        else -> {
+
+            RoutedDocumentContent(
+                uri = uri
+            )
+        }
+    }
+}
+
+@Composable
+private fun RoutedDocumentContent(
+    uri: Uri
+) {
+
+    val context =
+        LocalContext.current
+
+    var document by remember {
+        mutableStateOf<ReaderDocument?>(null)
     }
 
-    LazyColumn(
-        state = listState,
+    var error by remember {
+        mutableStateOf<String?>(null)
+    }
 
+    LaunchedEffect(uri) {
+
+        try {
+
+            document =
+                ReaderFormatRouter.open(
+                    context,
+                    uri
+                )
+
+        } catch (
+            exception: Exception
+        ) {
+
+            error =
+                exception.message
+                    ?: "Unable to open this document."
+        }
+    }
+
+    when {
+
+        error != null -> {
+
+            ErrorScreen(
+                message =
+                    error
+                        ?: "Unable to open document."
+            )
+        }
+
+        document == null -> {
+
+            LoadingScreen()
+        }
+
+        else -> {
+
+            ReaderDocumentScreen(
+                document = document!!,
+                documentUri = uri.toString()
+            )
+        }
+    }
+}
+
+@Composable
+private fun CbzReaderContent(
+    uri: Uri
+) {
+
+    val context =
+        LocalContext.current
+
+    var archive by remember {
+        mutableStateOf<ComicArchive?>(null)
+    }
+
+    var error by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    LaunchedEffect(uri) {
+
+        try {
+
+            archive =
+                CbzReader.open(
+                    context,
+                    uri
+                )
+
+        } catch (
+            exception: Exception
+        ) {
+
+            error =
+                exception.message
+                    ?: "Unable to open CBZ file."
+        }
+    }
+
+    when {
+
+        error != null -> {
+
+            ErrorScreen(
+                message =
+                    error
+                        ?: "Unable to open CBZ."
+            )
+        }
+
+        archive == null -> {
+
+            LoadingScreen()
+        }
+
+        else -> {
+
+            ComicReaderScreen(
+                pages =
+                    archive!!.pages
+            )
+        }
+    }
+}
+
+@Composable
+private fun CbrReaderContent(
+    uri: Uri
+) {
+
+    val context =
+        LocalContext.current
+
+    var archive by remember {
+        mutableStateOf<ComicArchive?>(null)
+    }
+
+    var error by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    LaunchedEffect(uri) {
+
+        try {
+
+            archive =
+                CbrReader.open(
+                    context,
+                    uri
+                )
+
+        } catch (
+            exception: Exception
+        ) {
+
+            error =
+                exception.message
+                    ?: "Unable to open CBR file."
+        }
+    }
+
+    when {
+
+        error != null -> {
+
+            ErrorScreen(
+                message =
+                    error
+                        ?: "Unable to open CBR."
+            )
+        }
+
+        archive == null -> {
+
+            LoadingScreen()
+        }
+
+        else -> {
+
+            ComicReaderScreen(
+                pages =
+                    archive!!.pages
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoadingScreen() {
+
+    Box(
         modifier =
-            modifier.fillMaxSize(),
+            Modifier.fillMaxSize(),
 
-        verticalArrangement =
-            Arrangement.spacedBy(
-                18.dp
-            )
+        contentAlignment =
+            Alignment.Center
     ) {
 
-        item {
+        CircularProgressIndicator()
+    }
+}
 
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = 22.dp,
-                            vertical = 24.dp
-                        )
-            ) {
+@Composable
+private fun ErrorScreen(
+    message: String
+) {
 
-                Text(
-                    text =
-                        document.title,
+    Box(
+        modifier =
+            Modifier.fillMaxSize(),
 
-                    style =
-                        MaterialTheme
-                            .typography
-                            .headlineMedium,
+        contentAlignment =
+            Alignment.Center
+    ) {
 
-                    fontWeight =
-                        FontWeight.Bold
+        Text(
+            text =
+                message,
+
+            modifier =
+                Modifier.padding(
+                    24.dp
                 )
-
-                document.author?.let { author ->
-
-                    Text(
-                        text = author,
-
-                        style =
-                            MaterialTheme
-                                .typography
-                                .bodyLarge,
-
-                        modifier =
-                            Modifier.padding(
-                                top = 8.dp
-                            )
-                    )
-                }
-            }
-        }
-
-        itemsIndexed(
-            document.chapters
-        ) { _, chapter ->
-
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = 22.dp
-                        )
-            ) {
-
-                Text(
-                    text =
-                        chapter.title,
-
-                    style =
-                        MaterialTheme
-                            .typography
-                            .titleLarge,
-
-                    fontWeight =
-                        FontWeight.SemiBold
-                )
-
-                Text(
-                    text =
-                        chapter.content,
-
-                    style =
-                        MaterialTheme
-                            .typography
-                            .bodyLarge,
-
-                    modifier =
-                        Modifier.padding(
-                            top = 10.dp,
-                            bottom = 10.dp
-                        )
-                )
-            }
-        }
+        )
     }
 }
