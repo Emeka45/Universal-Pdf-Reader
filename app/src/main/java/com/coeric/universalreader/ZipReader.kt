@@ -2,174 +2,13 @@ package com.coeric.universalreader
 
 import android.content.Context
 import android.net.Uri
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.util.zip.ZipInputStream
+import java.io.File
+import java.util.zip.ZipFile
 
 object ZipReader {
 
-    suspend fun open(
-        context: Context,
-        uri: Uri
-    ): ReaderDocument {
-
-        val input =
-            context.contentResolver
-                .openInputStream(uri)
-                ?: throw IllegalStateException(
-                    "Unable to open ZIP file."
-                )
-
-        val bytes =
-            input.use {
-                it.readBytes()
-            }
-
-        if (bytes.isEmpty()) {
-            throw IllegalArgumentException(
-                "The ZIP file is empty."
-            )
-        }
-
-        val entries =
-            extractEntries(bytes)
-
-        if (entries.isEmpty()) {
-            throw IllegalArgumentException(
-                "No files were found inside the ZIP archive."
-            )
-        }
-
-        // Prefer ebook/document formats.
-        val preferred =
-            entries
-                .filter {
-                    isSupportedDocument(
-                        it.name
-                    )
-                }
-                .sortedBy {
-                    documentPriority(
-                        it.name
-                    )
-                }
-
-        if (preferred.isEmpty()) {
-            throw IllegalArgumentException(
-                "No readable document was found inside this ZIP archive."
-            )
-        }
-
-        val selected =
-            preferred.first()
-
-        val format =
-            detectFormat(
-                selected.name
-            )
-
-        return openEntry(
-            context = context,
-            entry = selected,
-            format = format
-        )
-    }
-
-    private data class ZipEntryData(
-        val name: String,
-        val data: ByteArray
-    )
-
-    private fun extractEntries(
-        bytes: ByteArray
-    ): List<ZipEntryData> {
-
-        val result =
-            mutableListOf<ZipEntryData>()
-
-        ByteArrayInputStream(bytes).use { input ->
-
-            ZipInputStream(input).use { zip ->
-
-                while (true) {
-
-                    val entry =
-                        zip.nextEntry
-                            ?: break
-
-                    if (
-                        !entry.isDirectory
-                    ) {
-
-                        val name =
-                            entry.name
-
-                        if (
-                            name.isNotBlank()
-                        ) {
-
-                            val output =
-                                ByteArrayOutputStream()
-
-                            val buffer =
-                                ByteArray(
-                                    8192
-                                )
-
-                            while (true) {
-
-                                val count =
-                                    zip.read(
-                                        buffer
-                                    )
-
-                                if (count <= 0) {
-                                    break
-                                }
-
-                                output.write(
-                                    buffer,
-                                    0,
-                                    count
-                                )
-                            }
-
-                            val data =
-                                output.toByteArray()
-
-                            if (data.isNotEmpty()) {
-
-                                result.add(
-                                    ZipEntryData(
-                                        name = name,
-                                        data = data
-                                    )
-                                )
-                            }
-                        }
-                    }
-
-                    zip.closeEntry()
-                }
-            }
-        }
-
-        return result
-    }
-
-    private fun isSupportedDocument(
-        name: String
-    ): Boolean {
-
-        return when (
-            name
-                .substringAfterLast(
-                    '.',
-                    ""
-                )
-                .lowercase()
-        ) {
-
+    private val supportedExtensions =
+        setOf(
             "pdf",
             "epub",
             "mobi",
@@ -178,6 +17,8 @@ object ZipReader {
             "azw3",
             "kfx",
             "fb2",
+            "cbz",
+            "cbr",
             "txt",
             "html",
             "htm",
@@ -187,9 +28,267 @@ object ZipReader {
             "docx",
             "odt",
             "md",
-            "markdown" -> true
+            "markdown"
+        )
 
-            else -> false
+    suspend fun open(
+        context: Context,
+        uri: Uri
+    ): ReaderDocument {
+
+        val temporaryZip =
+            File.createTempFile(
+                "universal_reader_",
+                ".zip",
+                context.cacheDir
+            )
+
+        try {
+
+            copyUriToFile(
+                context,
+                uri,
+                temporaryZip
+            )
+
+            ZipFile(
+                temporaryZip
+            ).use { zip ->
+
+                val entry =
+                    findBestDocumentEntry(
+                        zip
+                    )
+                    ?: throw IllegalArgumentException(
+                        "No supported document was found inside this ZIP archive."
+                    )
+
+                val temporaryDocument =
+                    File.createTempFile(
+                        "universal_reader_entry_",
+                        getSafeExtension(
+                            entry.name
+                        ),
+                        context.cacheDir
+                    )
+
+                try {
+
+                    zip.getInputStream(
+                        entry
+                    ).use { input ->
+
+                        temporaryDocument
+                            .outputStream()
+                            .use { output ->
+
+                                input.copyTo(
+                                    output,
+                                    bufferSize = 64 * 1024
+                                )
+                            }
+                    }
+
+                    return openExtractedDocument(
+                        context,
+                        temporaryDocument,
+                        entry.name
+                    )
+
+                } finally {
+
+                    temporaryDocument.delete()
+                }
+            }
+
+        } finally {
+
+            temporaryZip.delete()
+        }
+    }
+
+    private suspend fun openExtractedDocument(
+        context: Context,
+        file: File,
+        originalName: String
+    ): ReaderDocument {
+
+        val extension =
+            originalName
+                .substringAfterLast(
+                    '.',
+                    ""
+                )
+                .lowercase()
+
+        val documentUri =
+            Uri.fromFile(file)
+
+        return when (extension) {
+
+            "epub" -> {
+
+                val epub =
+                    EpubReader.open(
+                        context,
+                        documentUri
+                    )
+
+                ReaderDocument(
+                    title =
+                        epub.title,
+
+                    author =
+                        epub.author,
+
+                    chapters =
+                        epub.chapters.map {
+                            ReaderChapter(
+                                title =
+                                    it.title,
+
+                                content =
+                                    it.content
+                            )
+                        }
+                )
+            }
+
+            "mobi",
+            "prc" -> {
+
+                MobiReader.open(
+                    context,
+                    documentUri
+                )
+            }
+
+            "azw",
+            "azw3",
+            "kfx" -> {
+
+                Kf8Reader.open(
+                    context,
+                    documentUri
+                )
+            }
+
+            "fb2" -> {
+
+                Fb2Reader.open(
+                    context,
+                    documentUri
+                )
+            }
+
+            "rtf" -> {
+
+                RtfReader.open(
+                    context,
+                    documentUri
+                )
+            }
+
+            "doc" -> {
+
+                DocReader.open(
+                    context,
+                    documentUri
+                )
+            }
+
+            "docx" -> {
+
+                DocxReader.open(
+                    context,
+                    documentUri
+                )
+            }
+
+            "odt" -> {
+
+                OdtReader.open(
+                    context,
+                    documentUri
+                )
+            }
+
+            "md",
+            "markdown" -> {
+
+                MarkdownReader.open(
+                    context,
+                    documentUri
+                )
+            }
+
+            "html",
+            "htm",
+            "xhtml" -> {
+
+                HtmlReader.open(
+                    context,
+                    documentUri
+                )
+            }
+
+            "txt" -> {
+
+                TxtReader.open(
+                    context,
+                    documentUri
+                )
+            }
+
+            "pdf" -> {
+
+                throw UnsupportedOperationException(
+                    "PDF files inside ZIP archives use the PDF reader directly."
+                )
+            }
+
+            "cbz",
+            "cbr" -> {
+
+                throw UnsupportedOperationException(
+                    "Comic archives inside ZIP files use the comic reader directly."
+                )
+            }
+
+            else -> {
+
+                throw UnsupportedOperationException(
+                    "Unsupported document inside ZIP: $extension"
+                )
+            }
+        }
+    }
+
+    private fun findBestDocumentEntry(
+        zip: ZipFile
+    ): java.util.zip.ZipEntry? {
+
+        val entries =
+            zip.entries()
+                .asSequence()
+                .filter {
+                    !it.isDirectory
+                }
+                .filter {
+                    hasSupportedExtension(
+                        it.name
+                    )
+                }
+                .toList()
+
+        if (entries.isEmpty()) {
+            return null
+        }
+
+        return entries.minByOrNull {
+            documentPriority(
+                it.name
+            )
         }
     }
 
@@ -198,117 +297,92 @@ object ZipReader {
     ): Int {
 
         return when (
-            name
-                .substringAfterLast(
-                    '.',
-                    ""
-                )
-                .lowercase()
+            name.substringAfterLast(
+                '.',
+                ""
+            ).lowercase()
         ) {
 
             "epub" -> 1
-            "pdf" -> 2
-            "mobi", "prc" -> 3
-            "azw3", "azw", "kfx" -> 4
+            "mobi",
+            "prc" -> 2
+            "azw3" -> 3
+            "azw" -> 4
             "fb2" -> 5
-            "docx" -> 6
-            "odt" -> 7
+            "pdf" -> 6
+            "docx" -> 7
             "doc" -> 8
-            "rtf" -> 9
-            "html", "htm", "xhtml" -> 10
-            "md", "markdown" -> 11
-            "txt" -> 12
-
+            "odt" -> 9
+            "rtf" -> 10
+            "html",
+            "htm",
+            "xhtml" -> 11
+            "md",
+            "markdown" -> 12
+            "txt" -> 13
+            "cbz" -> 14
+            "cbr" -> 15
             else -> 100
         }
     }
 
-    private fun detectFormat(
+    private fun hasSupportedExtension(
         name: String
-    ): DocumentFormat {
+    ): Boolean {
 
-        return when (
-            name
-                .substringAfterLast(
-                    '.',
-                    ""
-                )
-                .lowercase()
+        val extension =
+            name.substringAfterLast(
+                '.',
+                ""
+            ).lowercase()
+
+        return extension in supportedExtensions
+    }
+
+    private fun getSafeExtension(
+        name: String
+    ): String {
+
+        val extension =
+            name.substringAfterLast(
+                '.',
+                ""
+            )
+            .lowercase()
+
+        return if (
+            extension.isBlank()
         ) {
-
-            "pdf" ->
-                DocumentFormat.PDF
-
-            "epub" ->
-                DocumentFormat.EPUB
-
-            "mobi",
-            "prc" ->
-                DocumentFormat.MOBI
-
-            "azw" ->
-                DocumentFormat.AZW
-
-            "azw3",
-            "kfx" ->
-                DocumentFormat.AZW3
-
-            "fb2" ->
-                DocumentFormat.FB2
-
-            "txt" ->
-                DocumentFormat.TXT
-
-            "html",
-            "htm" ->
-                DocumentFormat.HTML
-
-            "xhtml" ->
-                DocumentFormat.XHTML
-
-            "rtf" ->
-                DocumentFormat.RTF
-
-            "doc" ->
-                DocumentFormat.DOC
-
-            "docx" ->
-                DocumentFormat.DOCX
-
-            "odt" ->
-                DocumentFormat.ODT
-
-            "md",
-            "markdown" ->
-                DocumentFormat.MARKDOWN
-
-            else ->
-                DocumentFormat.UNKNOWN
+            ".bin"
+        } else {
+            ".$extension"
         }
     }
 
-    private suspend fun openEntry(
+    private fun copyUriToFile(
         context: Context,
-        entry: ZipEntryData,
-        format: DocumentFormat
-    ): ReaderDocument {
+        uri: Uri,
+        destination: File
+    ) {
 
-        /*
-         * The existing readers work with Android Uri objects.
-         * A ZIP entry is already in memory, so we use a
-         * temporary content URI through an in-memory provider
-         * only where possible.
-         *
-         * For now, ZIP acts as an archive detector and reports
-         * the selected document rather than pretending that an
-         * arbitrary ZIP entry can be passed directly to another
-         * reader.
-         */
+        val input =
+            context.contentResolver
+                .openInputStream(uri)
+                ?: throw IllegalArgumentException(
+                    "Unable to open ZIP file."
+                )
 
-        throw UnsupportedOperationException(
-            "ZIP contains a readable ${format.name} file: " +
-                entry.name +
-                ". Direct archive-entry reading will be connected in the integration pass."
-        )
+        input.use { stream ->
+
+            destination
+                .outputStream()
+                .use { output ->
+
+                    stream.copyTo(
+                        output,
+                        bufferSize = 64 * 1024
+                    )
+                }
+        }
     }
 }
