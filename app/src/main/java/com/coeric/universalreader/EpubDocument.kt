@@ -8,5 +8,6 @@ data class EpubChapter(
 data class EpubDocument(
     val title: String,
     val author: String?,
-    val chapters: List<EpubChapter>
+    val chapters: List<EpubChapter>,
+    val images: List<EpubImage> = emptyList()
 )
