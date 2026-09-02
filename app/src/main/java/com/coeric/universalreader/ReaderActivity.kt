@@ -8,14 +8,24 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.TextIncrease
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +36,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -34,6 +45,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class ReaderActivity : ComponentActivity() {
 
@@ -54,15 +67,10 @@ class ReaderActivity : ComponentActivity() {
 
             MaterialTheme {
 
-                if (
-                    documentUri != null
-                ) {
+                if (documentUri != null) {
 
                     ReaderScreen(
-                        uri =
-                            Uri.parse(
-                                documentUri
-                            ),
+                        uri = Uri.parse(documentUri),
                         onBack = {
                             finish()
                         }
@@ -232,25 +240,22 @@ private fun EpubReaderScreen(
             value =
                 runCatching {
 
-                    kotlinx.coroutines
-                        .withContext(
-                            kotlinx.coroutines.Dispatchers.IO
-                        ) {
+                    withContext(
+                        Dispatchers.IO
+                    ) {
 
-                            EpubReader.open(
-                                context,
-                                uri
-                            )
-                        }
+                        EpubReader.open(
+                            context,
+                            uri
+                        )
+                    }
                 }
         }
 
     val result =
         epubState.value
 
-    if (
-        result == null
-    ) {
+    if (result == null) {
 
         Scaffold(
 
@@ -304,9 +309,7 @@ private fun EpubReaderScreen(
     val document =
         result.getOrNull()
 
-    if (
-        document == null
-    ) {
+    if (document == null) {
 
         val message =
             result
@@ -367,19 +370,66 @@ private fun EpubReaderScreen(
                             .headlineSmall
                 )
 
+                Spacer(
+                    modifier =
+                        Modifier.height(
+                            12.dp
+                        )
+                )
+
                 Text(
                     text =
-                        message,
-                    modifier =
-                        Modifier.padding(
-                            top = 12.dp
-                        )
+                        message
                 )
             }
         }
 
         return
     }
+
+    var currentChapter by remember(uri) {
+
+        mutableIntStateOf(
+
+            context
+                .getSharedPreferences(
+                    "reader_progress",
+                    android.content.Context.MODE_PRIVATE
+                )
+                .getInt(
+                    "epub_$uri",
+                    0
+                )
+                .coerceIn(
+                    0,
+                    document.chapters.lastIndex
+                )
+        )
+    }
+
+    var showTableOfContents by remember {
+        mutableStateOf(false)
+    }
+
+    var fontSize by remember {
+        mutableFloatStateOf(18f)
+    }
+
+    var showFontControls by remember {
+        mutableStateOf(false)
+    }
+
+    val preferences =
+        remember(uri) {
+
+            context.getSharedPreferences(
+                "reader_progress",
+                android.content.Context.MODE_PRIVATE
+            )
+        }
+
+    val chapter =
+        document.chapters[currentChapter]
 
     Scaffold(
 
@@ -408,6 +458,41 @@ private fun EpubReaderScreen(
                                 "Back"
                         )
                     }
+                },
+
+                actions = {
+
+                    IconButton(
+                        onClick = {
+
+                            showTableOfContents =
+                                !showTableOfContents
+                        }
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Default.MenuBook,
+                            contentDescription =
+                                "Table of contents"
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+
+                            showFontControls =
+                                !showFontControls
+                        }
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Default.TextIncrease,
+                            contentDescription =
+                                "Font size"
+                        )
+                    }
                 }
             )
         }
@@ -418,11 +503,237 @@ private fun EpubReaderScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .verticalScroll(
-                        rememberScrollState()
-                    )
                     .padding(
                         paddingValues
+                    )
+        ) {
+
+            if (showFontControls) {
+
+                Column(
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 20.dp,
+                            vertical = 8.dp
+                        )
+                ) {
+
+                    Text(
+                        text =
+                            "Text Size",
+                        style =
+                            MaterialTheme
+                                .typography
+                                .labelLarge
+                    )
+
+                    Slider(
+                        value =
+                            fontSize,
+                        onValueChange = {
+                            fontSize = it
+                        },
+                        valueRange =
+                            12f..32f
+                    )
+                }
+            }
+
+            if (showTableOfContents) {
+
+                TableOfContents(
+
+                    document =
+                        document,
+
+                    currentChapter =
+                        currentChapter,
+
+                    onChapterSelected = { index ->
+
+                        currentChapter =
+                            index
+
+                        preferences
+                            .edit()
+                            .putInt(
+                                "epub_$uri",
+                                index
+                            )
+                            .apply()
+
+                        showTableOfContents =
+                            false
+                    }
+                )
+
+            } else {
+
+                ChapterContent(
+
+                    document =
+                        document,
+
+                    chapter =
+                        chapter,
+
+                    chapterIndex =
+                        currentChapter,
+
+                    fontSize =
+                        fontSize,
+
+                    onPrevious = {
+
+                        if (
+                            currentChapter > 0
+                        ) {
+
+                            currentChapter--
+
+                            preferences
+                                .edit()
+                                .putInt(
+                                    "epub_$uri",
+                                    currentChapter
+                                )
+                                .apply()
+                        }
+                    },
+
+                    onNext = {
+
+                        if (
+                            currentChapter <
+                            document.chapters.lastIndex
+                        ) {
+
+                            currentChapter++
+
+                            preferences
+                                .edit()
+                                .putInt(
+                                    "epub_$uri",
+                                    currentChapter
+                                )
+                                .apply()
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TableOfContents(
+    document: EpubDocument,
+    currentChapter: Int,
+    onChapterSelected: (Int) -> Unit
+) {
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(
+                    rememberScrollState()
+                )
+                .padding(
+                    20.dp
+                )
+    ) {
+
+        Text(
+            text =
+                "Table of Contents",
+            style =
+                MaterialTheme
+                    .typography
+                    .headlineSmall
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(
+                    12.dp
+                )
+        )
+
+        for (
+            index in document.chapters.indices
+        ) {
+
+            Card(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            vertical = 4.dp
+                        ),
+                onClick = {
+                    onChapterSelected(
+                        index
+                    )
+                }
+            ) {
+
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                16.dp
+                            ),
+                    horizontalArrangement =
+                        Arrangement.SpaceBetween
+                ) {
+
+                    Text(
+                        text =
+                            "${index + 1}. ${document.chapters[index].title}",
+                        style =
+                            if (
+                                index ==
+                                currentChapter
+                            ) {
+                                MaterialTheme
+                                    .typography
+                                    .titleMedium
+                            } else {
+                                MaterialTheme
+                                    .typography
+                                    .bodyLarge
+                            }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChapterContent(
+    document: EpubDocument,
+    chapter: EpubChapter,
+    chapterIndex: Int,
+    fontSize: Float,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit
+) {
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+    ) {
+
+        Column(
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(
+                        rememberScrollState()
                     )
                     .padding(
                         20.dp
@@ -435,7 +746,7 @@ private fun EpubReaderScreen(
                 style =
                     MaterialTheme
                         .typography
-                        .headlineMedium
+                        .titleMedium
             )
 
             document.author?.let {
@@ -446,44 +757,117 @@ private fun EpubReaderScreen(
                     style =
                         MaterialTheme
                             .typography
-                            .bodyLarge,
+                            .bodyMedium,
                     modifier =
                         Modifier.padding(
-                            top = 6.dp,
+                            top = 4.dp,
                             bottom = 20.dp
                         )
                 )
             }
 
-            for (
-                chapter in document.chapters
+            Text(
+                text =
+                    chapter.title,
+                style =
+                    MaterialTheme
+                        .typography
+                        .headlineMedium,
+                modifier =
+                    Modifier.padding(
+                        bottom = 16.dp
+                    )
+            )
+
+            Text(
+                text =
+                    chapter.content,
+                fontSize =
+                    fontSize.sp,
+                lineHeight =
+                    (fontSize * 1.55f).sp
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(
+                        24.dp
+                    )
+            )
+        }
+
+        Divider()
+
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        12.dp
+                    ),
+            horizontalArrangement =
+                Arrangement.SpaceBetween
+        ) {
+
+            Button(
+                enabled =
+                    chapterIndex > 0,
+                onClick =
+                    onPrevious
             ) {
 
-                Text(
-                    text =
-                        chapter.title,
-                    style =
-                        MaterialTheme
-                            .typography
-                            .headlineSmall,
+                Icon(
+                    imageVector =
+                        Icons.Default.ArrowBack,
+                    contentDescription =
+                        "Previous chapter"
+                )
+
+                Spacer(
                     modifier =
                         Modifier.padding(
-                            top = 20.dp,
-                            bottom = 10.dp
+                            horizontal = 4.dp
                         )
                 )
 
                 Text(
-                    text =
-                        chapter.content,
-                    style =
-                        MaterialTheme
-                            .typography
-                            .bodyLarge,
+                    "Previous"
+                )
+            }
+
+            Text(
+                text =
+                    "${chapterIndex + 1} / ${document.chapters.size}",
+                modifier =
+                    Modifier.padding(
+                        top = 12.dp
+                    )
+            )
+
+            Button(
+                enabled =
+                    chapterIndex <
+                    document.chapters.lastIndex,
+                onClick =
+                    onNext
+            ) {
+
+                Text(
+                    "Next"
+                )
+
+                Spacer(
                     modifier =
                         Modifier.padding(
-                            bottom = 20.dp
+                            horizontal = 4.dp
                         )
+                )
+
+                Icon(
+                    imageVector =
+                        Icons.Default.ArrowForward,
+                    contentDescription =
+                        "Next chapter"
                 )
             }
         }
@@ -500,15 +884,11 @@ private fun TextReaderScreen(
         LocalContext.current
 
     var fontSize by remember {
-        mutableFloatStateOf(
-            18f
-        )
+        mutableFloatStateOf(18f)
     }
 
     var showFontControls by remember {
-        mutableStateOf(
-            false
-        )
+        mutableStateOf(false)
     }
 
     val documentText =
@@ -521,15 +901,20 @@ private fun TextReaderScreen(
 
             value = try {
 
-                context.contentResolver
-                    .openInputStream(
-                        uri
-                    )
-                    ?.bufferedReader()
-                    ?.use {
-                        it.readText()
-                    }
-                    ?: "Unable to open this document."
+                withContext(
+                    Dispatchers.IO
+                ) {
+
+                    context.contentResolver
+                        .openInputStream(
+                            uri
+                        )
+                        ?.bufferedReader()
+                        ?.use {
+                            it.readText()
+                        }
+                        ?: "Unable to open this document."
+                }
 
             } catch (
                 exception: Exception
@@ -599,9 +984,7 @@ private fun TextReaderScreen(
                     )
         ) {
 
-            if (
-                showFontControls
-            ) {
+            if (showFontControls) {
 
                 Column(
                     modifier =
