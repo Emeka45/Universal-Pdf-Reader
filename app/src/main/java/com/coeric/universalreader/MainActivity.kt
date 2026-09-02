@@ -2,9 +2,12 @@
 
 package com.coeric.universalreader
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +33,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -49,6 +56,44 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun UniversalReaderHome() {
+
+    var selectedDocument by remember {
+        mutableStateOf<DocumentInfo?>(null)
+    }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+
+        if (uri != null) {
+            selectedDocument = DocumentDetector.detect(
+                context = androidx.compose.ui.platform.LocalContext.current,
+                uri = uri
+            )
+        }
+    }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    fun openFile() {
+        filePickerLauncher.launch(
+            arrayOf(
+                "application/pdf",
+                "application/epub+zip",
+                "application/x-mobipocket-ebook",
+                "text/plain",
+                "text/html",
+                "application/rtf",
+                "application/msword",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.oasis.opendocument.text",
+                "application/zip",
+                "application/x-rar-compressed",
+                "*/*"
+            )
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -109,7 +154,7 @@ fun UniversalReaderHome() {
 
             item {
                 Button(
-                    onClick = {},
+                    onClick = { openFile() },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(
@@ -133,31 +178,40 @@ fun UniversalReaderHome() {
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                Card(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                if (selectedDocument == null) {
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "Your library is empty",
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Your library is empty",
+                                style = MaterialTheme.typography.titleMedium
+                            )
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
 
-                        Text(
-                            text = "Open a PDF, EPUB, MOBI, or other supported document to get started.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                            Text(
+                                text = "Open a PDF, EPUB, MOBI, or other supported document to get started.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                        Button(onClick = {}) {
-                            Text("Open Your First Book")
+                            Button(
+                                onClick = { openFile() }
+                            ) {
+                                Text("Open Your First Book")
+                            }
                         }
                     }
+
+                } else {
+
+                    DocumentCard(selectedDocument!!)
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -189,6 +243,44 @@ fun UniversalReaderHome() {
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun DocumentCard(document: DocumentInfo) {
+
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Text(
+                text = document.name,
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Format: ${
+                    if (document.extension.isNotEmpty()) {
+                        document.extension.uppercase()
+                    } else {
+                        document.mimeType ?: "Unknown"
+                    }
+                }",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = {}
+            ) {
+                Text("Open Reader")
             }
         }
     }
