@@ -1,6 +1,8 @@
 package com.coeric.universalreader
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +37,10 @@ fun ReaderDocumentScreen(
     document: ReaderDocument
 ) {
 
+    val backDispatcher =
+        LocalOnBackPressedDispatcherOwner.current
+            ?.onBackPressedDispatcher
+
     var showChapterList by remember {
         mutableStateOf(false)
     }
@@ -44,8 +50,14 @@ fun ReaderDocumentScreen(
     }
 
     BackHandler {
+
         if (showChapterList) {
+
             showChapterList = false
+
+        } else {
+
+            backDispatcher?.onBackPressed()
         }
     }
 
@@ -55,6 +67,7 @@ fun ReaderDocumentScreen(
             CenterAlignedTopAppBar(
 
                 title = {
+
                     Text(
                         text = document.title,
                         maxLines = 1
@@ -64,7 +77,18 @@ fun ReaderDocumentScreen(
                 navigationIcon = {
 
                     IconButton(
-                        onClick = {}
+                        onClick = {
+
+                            if (showChapterList) {
+
+                                showChapterList = false
+
+                            } else {
+
+                                backDispatcher
+                                    ?.onBackPressed()
+                            }
+                        }
                     ) {
 
                         Icon(
@@ -81,6 +105,7 @@ fun ReaderDocumentScreen(
 
                     IconButton(
                         onClick = {
+
                             showChapterList =
                                 !showChapterList
                         }
@@ -153,7 +178,7 @@ private fun ChapterList(
 
         verticalArrangement =
             Arrangement.spacedBy(
-                4.dp
+                2.dp
             )
     ) {
 
@@ -204,14 +229,17 @@ private fun ChapterList(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .clickable {
+
+                            onChapterSelected(
+                                index
+                            )
+                        }
                         .padding(
                             horizontal = 20.dp,
-                            vertical = 14.dp
+                            vertical = 16.dp
                         )
-                        .then(
-                            Modifier
-                        )
-            }
+            )
         }
     }
 }
