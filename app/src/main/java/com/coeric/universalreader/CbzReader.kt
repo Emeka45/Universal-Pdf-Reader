@@ -2,90 +2,141 @@ package com.coeric.universalreader
 
 import android.content.Context
 import android.net.Uri
-import java.util.zip.ZipInputStream
-
-data class ComicPage(
-    val name: String,
-    val data: ByteArray
-)
+import java.io.File
+import java.io.FileOutputStream
+import java.util.zip.ZipFile
 
 object CbzReader {
 
     suspend fun open(
         context: Context,
         uri: Uri
-    ): List<ComicPage> {
+    ): ComicArchive {
 
-        val input =
-            context.contentResolver
-                .openInputStream(uri)
-                ?: throw IllegalStateException(
-                    "Unable to open CBZ file."
-                )
+        val temporaryFile =
+            File.createTempFile(
+                "universal_reader_",
+                ".zip",
+                context.cacheDir
+            )
 
-        val pages =
-            mutableListOf<ComicPage>()
+        try {
 
-        input.use { stream ->
+            copyUriToFile(
+                context,
+                uri,
+                temporaryFile
+            )
 
-            ZipInputStream(stream).use { zip ->
+            val pages =
+                mutableListOf<ComicPage>()
 
-                while (true) {
+            ZipFile(temporaryFile).use { zip ->
+
+                val entries =
+                    zip.entries()
+
+                while (entries.hasMoreElements()) {
 
                     val entry =
-                        zip.nextEntry
-                            ?: break
+                        entries.nextElement()
 
-                    if (
-                        entry.isDirectory
-                    ) {
+                    if (entry.isDirectory) {
                         continue
                     }
 
                     val name =
                         entry.name
 
-                    if (
-                        isImageFile(name)
-                    ) {
-
-                        val data =
-                            zip.readBytes()
-
-                        if (
-                            data.isNotEmpty()
-                        ) {
-
-                            pages.add(
-                                ComicPage(
-                                    name = name,
-                                    data = data
-                                )
-                            )
-                        }
+                    if (!isImageFile(name)) {
+                        continue
                     }
 
-                    zip.closeEntry()
+                    val pageFile =
+                        File.createTempFile(
+                            "comic_page_",
+                            getExtension(name),
+                            context.cacheDir
+                        )
+
+                    try {
+
+                        zip.getInputStream(
+                            entry
+                        ).use { input ->
+
+                            FileOutputStream(
+                                pageFile
+                            ).use { output ->
+
+                                input.copyTo(
+                                    output,
+                                    bufferSize = 64 * 1024
+                                )
+                            }
+                        }
+
+                        pages.add(
+                            ComicPage(
+                                name = name,
+                                file = pageFile
+                            )
+                        )
+
+                    } catch (
+                        exception: Exception
+                    ) {
+
+                        pageFile.delete()
+
+                        throw exception
+                    }
                 }
             }
-        }
 
-        pages.sortWith(
-            compareBy {
-                naturalSortKey(it.name)
-            }
-        )
-
-        if (
-            pages.isEmpty()
-        ) {
-
-            throw IllegalArgumentException(
-                "No comic-book images were found in this CBZ file."
+            pages.sortWith(
+                Comparator { first, second ->
+                    naturalCompare(
+                        first.name,
+                        second.name
+                    )
+                }
             )
-        }
 
-        return pages
+            return ComicArchive(
+                pages = pages,
+                format = ComicArchiveFormat.CBZ
+            )
+
+        } finally {
+
+            temporaryFile.delete()
+        }
+    }
+
+    private fun copyUriToFile(
+        context: Context,
+        uri: Uri,
+        destination: File
+    ) {
+
+        val input =
+            context.contentResolver
+                .openInputStream(uri)
+                ?: throw IllegalArgumentException(
+                    "Unable to open CBZ file."
+                )
+
+        input.use { stream ->
+
+            destination.outputStream().use { output ->
+
+                stream.copyTo(
+                    output,
+                    bufferSize = 64 * 1024
+                )
+            }
+        }
     }
 
     private fun isImageFile(
@@ -93,12 +144,10 @@ object CbzReader {
     ): Boolean {
 
         return when (
-            name
-                .substringAfterLast(
-                    '.',
-                    ""
-                )
-                .lowercase()
+            name.substringAfterLast(
+                '.',
+                ""
+            ).lowercase()
         ) {
 
             "jpg",
@@ -112,23 +161,95 @@ object CbzReader {
         }
     }
 
-    private fun naturalSortKey(
+    private fun getExtension(
+        name: String
+    ): String {
+
+        val extension =
+            name.substringAfterLast(
+                '.',
+                "img"
+            )
+
+        return ".$extension"
+    }
+
+    private fun naturalCompare(
+        first: String,
+        second: String
+    ): Int {
+
+        val firstParts =
+            splitNaturalParts(
+                first
+            )
+
+        val secondParts =
+            splitNaturalParts(
+                second
+            )
+
+        val size =
+            minOf(
+                firstParts.size,
+                secondParts.size
+            )
+
+        for (
+            index in 0 until size
+        ) {
+
+            val a =
+                firstParts[index]
+
+            val b =
+                secondParts[index]
+
+            val result =
+
+                if (
+                    a is Long &&
+                    b is Long
+                ) {
+
+                    a.compareTo(b)
+
+                } else {
+
+                    a.toString()
+                        .lowercase()
+                        .compareTo(
+                            b.toString()
+                                .lowercase()
+                        )
+                }
+
+            if (result != 0) {
+                return result
+            }
+        }
+
+        return firstParts.size.compareTo(
+            secondParts.size
+        )
+    }
+
+    private fun splitNaturalParts(
         value: String
     ): List<Any> {
 
         val result =
             mutableListOf<Any>()
 
-        val parts =
-            Regex(
-                "(\\d+|\\D+)"
-            )
-                .findAll(value.lowercase())
-                .map {
-                    it.value
-                }
+        val regex =
+            Regex("\\d+|\\D+")
 
-        for (part in parts) {
+        for (
+            match in regex.findAll(value)
+        ) {
+
+            val part =
+                match.value
 
             if (
                 part.all {
@@ -138,14 +259,12 @@ object CbzReader {
 
                 result.add(
                     part.toLongOrNull()
-                        ?: 0L
+                        ?: Long.MAX_VALUE
                 )
 
             } else {
 
-                result.add(
-                    part
-                )
+                result.add(part)
             }
         }
 
