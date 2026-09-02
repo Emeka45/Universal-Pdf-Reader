@@ -2,7 +2,7 @@ package com.coeric.universalreader
 
 import android.content.Context
 import android.net.Uri
-import java.nio.charset.StandardCharsets
+import java.nio.charset.Charset
 
 object Kf8Reader {
 
@@ -15,33 +15,61 @@ object Kf8Reader {
             context.contentResolver
                 .openInputStream(uri)
                 ?.use { it.readBytes() }
-                ?: throw IllegalStateException(
-                    "Unable to open KF8/AZW3 file."
+                ?: throw IllegalArgumentException(
+                    "Unable to open AZW/KF8 file."
                 )
 
         if (bytes.isEmpty()) {
             throw IllegalArgumentException(
-                "The KF8/AZW3 file is empty."
+                "The AZW/KF8 file is empty."
             )
         }
 
-        val text =
-            extractReadableText(bytes)
+        val formatInfo =
+            MobiFormatDetector.detect(
+                bytes
+            )
 
-        if (text.isBlank()) {
+        val rawText =
+            extractReadableText(
+                bytes
+            )
+
+        if (rawText.isBlank()) {
             throw IllegalArgumentException(
-                "No readable text was found in this KF8/AZW3 file."
+                "No readable text was found in this AZW/KF8 file."
             )
         }
 
-        val title =
-            detectTitle(text)
-                ?: "KF8 Book"
+        val cleanedText =
+            cleanText(
+                rawText
+            )
+
+        val chapters =
+            createChapters(
+                cleanedText
+            )
+
+        if (chapters.isEmpty()) {
+            throw IllegalArgumentException(
+                "Unable to create readable chapters from this AZW/KF8 file."
+            )
+        }
 
         return ReaderDocument(
-            title = title,
-            author = null,
-            chapters = createChapters(text)
+            title =
+                formatInfo.title
+                    ?: getDocumentName(
+                        context,
+                        uri
+                    ),
+
+            author =
+                formatInfo.author,
+
+            chapters =
+                chapters
         )
     }
 
@@ -55,30 +83,33 @@ object Kf8Reader {
         candidates.add(
             decode(
                 bytes,
-                StandardCharsets.UTF_8
+                Charsets.UTF_8
             )
         )
 
         candidates.add(
             decode(
                 bytes,
-                CharsetFallback.windows1252()
+                Charset.forName(
+                    "windows-1252"
+                )
             )
         )
 
-        return candidates
-            .map {
-                cleanText(it)
+        val best =
+            candidates.maxByOrNull {
+                readabilityScore(it)
             }
-            .maxByOrNull {
-                readableScore(it)
-            }
-            ?: ""
+                ?: ""
+
+        return stripHtml(
+            best
+        )
     }
 
     private fun decode(
         bytes: ByteArray,
-        charset: java.nio.charset.Charset
+        charset: Charset
     ): String {
 
         return try {
@@ -89,37 +120,102 @@ object Kf8Reader {
             )
 
         } catch (
-            _: Exception
+            exception: Exception
         ) {
 
             ""
         }
     }
 
-    private fun cleanText(
-        input: String
+    private fun readabilityScore(
+        text: String
+    ): Int {
+
+        if (text.isBlank()) {
+            return 0
+        }
+
+        var score = 0
+
+        for (character in text) {
+
+            when {
+
+                character == '\n' -> {
+                    score += 2
+                }
+
+                character == ' ' -> {
+                    score += 1
+                }
+
+                character.isLetterOrDigit() -> {
+                    score += 3
+                }
+
+                character == '<' ||
+                character == '>' -> {
+                    score -= 1
+                }
+
+                character.code in 0..31 &&
+                character != '\n' &&
+                character != '\r' &&
+                character != '\t' -> {
+                    score -= 5
+                }
+            }
+        }
+
+        return score
+    }
+
+    private fun stripHtml(
+        text: String
     ): String {
 
-        return input
+        return text
             .replace(
                 Regex(
-                    "<script[\\s\\S]*?</script>",
-                    RegexOption.IGNORE_CASE
+                    "(?is)<script.*?>.*?</script>"
                 ),
                 ""
             )
             .replace(
                 Regex(
-                    "<style[\\s\\S]*?</style>",
-                    RegexOption.IGNORE_CASE
+                    "(?is)<style.*?>.*?</style>"
                 ),
                 ""
+            )
+            .replace(
+                Regex(
+                    "(?i)<br\\s*/?>"
+                ),
+                "\n"
+            )
+            .replace(
+                Regex(
+                    "(?i)</p>"
+                ),
+                "\n\n"
+            )
+            .replace(
+                Regex(
+                    "(?i)</div>"
+                ),
+                "\n\n"
+            )
+            .replace(
+                Regex(
+                    "(?i)</h[1-6]>"
+                ),
+                "\n\n"
             )
             .replace(
                 Regex(
                     "<[^>]+>"
                 ),
-                " "
+                ""
             )
             .replace(
                 "&nbsp;",
@@ -138,6 +234,33 @@ object Kf8Reader {
                 ">"
             )
             .replace(
+                "&quot;",
+                "\""
+            )
+            .replace(
+                "&#39;",
+                "'"
+            )
+    }
+
+    private fun cleanText(
+        text: String
+    ): String {
+
+        return text
+            .replace(
+                "\u0000",
+                ""
+            )
+            .replace(
+                "\r\n",
+                "\n"
+            )
+            .replace(
+                '\r',
+                '\n'
+            )
+            .replace(
                 Regex(
                     "[ \\t]+"
                 ),
@@ -145,162 +268,303 @@ object Kf8Reader {
             )
             .replace(
                 Regex(
-                    "\\n{3,}"
+                    "\n{3,}"
                 ),
                 "\n\n"
             )
             .trim()
     }
 
-    private fun readableScore(
-        text: String
-    ): Int {
-
-        if (text.isBlank()) {
-            return 0
-        }
-
-        var score =
-            0
-
-        for (character in text) {
-
-            if (
-                character.isLetterOrDigit() ||
-                character.isWhitespace() ||
-                ".,!?;:'\"-()".contains(
-                    character
-                )
-            ) {
-                score++
-            }
-        }
-
-        return score
-    }
-
-    private fun detectTitle(
-        text: String
-    ): String? {
-
-        return text
-            .lineSequence()
-            .map {
-                it.trim()
-            }
-            .firstOrNull {
-                it.length in 2..150 &&
-                    it.count {
-                        character ->
-                        character.isLetter()
-                    } >= 2
-            }
-    }
-
     private fun createChapters(
         text: String
     ): List<ReaderChapter> {
 
-        val paragraphs =
-            text
-                .split(
-                    Regex(
-                        "\\n\\s*\\n"
-                    )
-                )
-                .map {
-                    it.trim()
-                }
-                .filter {
-                    it.isNotBlank()
-                }
-
-        if (paragraphs.isEmpty()) {
-
-            return listOf(
-                ReaderChapter(
-                    title = "Chapter 1",
-                    content = text
-                )
-            )
+        if (text.isBlank()) {
+            return emptyList()
         }
 
         val chapters =
             mutableListOf<ReaderChapter>()
 
-        val builder =
-            StringBuilder()
+        val detectedSections =
+            detectSections(
+                text
+            )
 
-        var chapterNumber =
-            1
-
-        for (
-            paragraph in paragraphs
+        if (
+            detectedSections.size >= 2
         ) {
 
-            if (
-                builder.isNotEmpty() &&
-                builder.length +
-                paragraph.length >
-                12000
+            for (
+                index in detectedSections.indices
             ) {
+
+                val start =
+                    detectedSections[index].first
+
+                val end =
+                    if (
+                        index + 1 <
+                        detectedSections.size
+                    ) {
+                        detectedSections[
+                            index + 1
+                        ].first
+                    } else {
+                        text.length
+                    }
+
+                val title =
+                    detectedSections[index].second
+
+                val content =
+                    text.substring(
+                        start,
+                        end
+                    ).trim()
+
+                if (content.isNotBlank()) {
+
+                    chapters.add(
+                        ReaderChapter(
+                            title =
+                                title.ifBlank {
+                                    "Chapter ${index + 1}"
+                                },
+
+                            content =
+                                content
+                        )
+                    )
+                }
+            }
+
+            if (chapters.isNotEmpty()) {
+                return chapters
+            }
+        }
+
+        val chapterSize =
+            12_000
+
+        var position = 0
+        var chapterNumber = 1
+
+        while (
+            position < text.length
+        ) {
+
+            val targetEnd =
+                minOf(
+                    position + chapterSize,
+                    text.length
+                )
+
+            var end =
+                targetEnd
+
+            if (
+                targetEnd < text.length
+            ) {
+
+                val paragraphBreak =
+                    text.lastIndexOf(
+                        "\n\n",
+                        targetEnd
+                    )
+
+                if (
+                    paragraphBreak >
+                    position + 2_000
+                ) {
+
+                    end =
+                        paragraphBreak
+                }
+            }
+
+            val content =
+                text.substring(
+                    position,
+                    end
+                ).trim()
+
+            if (content.isNotBlank()) {
 
                 chapters.add(
                     ReaderChapter(
                         title =
                             "Chapter $chapterNumber",
+
                         content =
-                            builder
-                                .toString()
-                                .trim()
+                            content
                     )
                 )
 
                 chapterNumber++
-
-                builder.clear()
             }
 
-            if (
-                builder.isNotEmpty()
-            ) {
-                builder.append(
-                    "\n\n"
-                )
-            }
-
-            builder.append(
-                paragraph
-            )
-        }
-
-        if (
-            builder.isNotEmpty()
-        ) {
-
-            chapters.add(
-                ReaderChapter(
-                    title =
-                        "Chapter $chapterNumber",
-                    content =
-                        builder
-                            .toString()
-                            .trim()
-                )
-            )
+            position =
+                if (end <= position) {
+                    targetEnd
+                } else {
+                    end
+                }
         }
 
         return chapters
     }
 
-    private object CharsetFallback {
+    private fun detectSections(
+        text: String
+    ): List<Pair<Int, String>> {
 
-        fun windows1252():
-            java.nio.charset.Charset {
+        val result =
+            mutableListOf<Pair<Int, String>>()
 
-            return java.nio.charset.Charset.forName(
-                "windows-1252"
-            )
+        val lines =
+            text.split('\n')
+
+        var position = 0
+
+        for (line in lines) {
+
+            val trimmed =
+                line.trim()
+
+            if (
+                looksLikeChapterHeading(
+                    trimmed
+                )
+            ) {
+
+                result.add(
+                    position to trimmed
+                )
+            }
+
+            position +=
+                line.length + 1
         }
+
+        return result
+    }
+
+    private fun looksLikeChapterHeading(
+        line: String
+    ): Boolean {
+
+        if (line.length !in 3..100) {
+            return false
+        }
+
+        val lower =
+            line.lowercase()
+
+        if (
+            lower.startsWith("chapter ") ||
+            lower.matches(
+                Regex(
+                    "chapter\\s+[0-9ivxlcdm]+.*"
+                )
+            )
+        ) {
+            return true
+        }
+
+        if (
+            lower.startsWith("part ") ||
+            lower.matches(
+                Regex(
+                    "part\\s+[0-9ivxlcdm]+.*"
+                )
+            )
+        ) {
+            return true
+        }
+
+        if (
+            lower.matches(
+                Regex(
+                    "(prologue|epilogue|introduction|preface|afterword)"
+                )
+            )
+        ) {
+            return true
+        }
+
+        val words =
+            line.split(
+                Regex("\\s+")
+            )
+
+        if (
+            words.size in 1..8 &&
+            line.length <= 60
+        ) {
+
+            val uppercaseLetters =
+                line.count {
+                    it.isUpperCase()
+                }
+
+            val letters =
+                line.count {
+                    it.isLetter()
+                }
+
+            if (
+                letters > 0 &&
+                uppercaseLetters.toFloat() /
+                letters.toFloat() >= 0.65f
+            ) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private fun getDocumentName(
+        context: Context,
+        uri: Uri
+    ): String {
+
+        var name =
+            "AZW/KF8 Document"
+
+        context.contentResolver
+            .query(
+                uri,
+                arrayOf(
+                    android.provider.OpenableColumns.DISPLAY_NAME
+                ),
+                null,
+                null,
+                null
+            )
+            ?.use { cursor ->
+
+                if (cursor.moveToFirst()) {
+
+                    val index =
+                        cursor.getColumnIndex(
+                            android.provider.OpenableColumns.DISPLAY_NAME
+                        )
+
+                    if (index >= 0) {
+
+                        name =
+                            cursor.getString(
+                                index
+                            )
+                    }
+                }
+            }
+
+        return name.substringBeforeLast(
+            '.',
+            name
+        )
     }
 }
