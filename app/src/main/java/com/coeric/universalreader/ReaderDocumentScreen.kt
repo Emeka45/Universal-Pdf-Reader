@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,7 +58,6 @@ fun ReaderDocumentScreen(
     }
 
     var selectedChapter by remember {
-
         mutableStateOf(0)
     }
 
@@ -142,13 +143,40 @@ fun ReaderDocumentScreen(
                     IconButton(
                         onClick = {
 
+                            showSettings =
+                                !showSettings
+
+                            if (
+                                showSettings
+                            ) {
+
+                                showChapterList =
+                                    false
+                            }
+                        }
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Default.Settings,
+
+                            contentDescription =
+                                "Reader settings"
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+
                             showChapterList =
                                 !showChapterList
 
                             if (
                                 showChapterList
                             ) {
-                                showSettings = false
+
+                                showSettings =
+                                    false
                             }
                         }
                     ) {
@@ -171,7 +199,8 @@ fun ReaderDocumentScreen(
             showSettings -> {
 
                 ReaderSettingsPanel(
-                    settings = settings,
+                    settings =
+                        settings,
 
                     onSettingsChanged = {
                         newSettings ->
@@ -189,13 +218,14 @@ fun ReaderDocumentScreen(
                         Modifier.padding(
                             paddingValues
                         )
-                )
+                }
             }
 
             showChapterList -> {
 
                 ChapterList(
-                    document = document,
+                    document =
+                        document,
 
                     selectedChapter =
                         selectedChapter,
@@ -238,7 +268,8 @@ fun ReaderDocumentScreen(
             else -> {
 
                 DocumentContent(
-                    document = document,
+                    document =
+                        document,
 
                     selectedChapter =
                         selectedChapter,
@@ -288,6 +319,9 @@ private fun ChapterList(
                         .typography
                         .headlineSmall,
 
+                fontWeight =
+                    FontWeight.Bold,
+
                 modifier =
                     Modifier.padding(
                         horizontal = 20.dp,
@@ -314,11 +348,12 @@ private fun ChapterList(
                         index ==
                         selectedChapter
                     ) {
-                        androidx.compose.ui.text.font
-                            .FontWeight.Bold
+
+                        FontWeight.Bold
+
                     } else {
-                        androidx.compose.ui.text.font
-                            .FontWeight.Normal
+
+                        FontWeight.Normal
                     },
 
                 modifier =
@@ -410,42 +445,6 @@ private fun DocumentContent(
         )
     }
 
-    val backgroundModifier =
-        when (
-            settings.theme
-        ) {
-
-            ReaderTheme.LIGHT ->
-                Modifier
-
-            ReaderTheme.DARK ->
-                Modifier
-
-            ReaderTheme.SEPIA ->
-                Modifier
-        }
-
-    val textColor =
-        when (
-            settings.theme
-        ) {
-
-            ReaderTheme.LIGHT ->
-                MaterialTheme
-                    .colorScheme
-                    .onBackground
-
-            ReaderTheme.DARK ->
-                MaterialTheme
-                    .colorScheme
-                    .onBackground
-
-            ReaderTheme.SEPIA ->
-                MaterialTheme
-                    .colorScheme
-                    .onBackground
-        }
-
     val alignment =
         when (
             settings.textAlignment
@@ -473,7 +472,9 @@ private fun DocumentContent(
                 alignment,
 
             color =
-                textColor
+                MaterialTheme
+                    .colorScheme
+                    .onBackground
         )
 
     LazyColumn(
@@ -481,11 +482,7 @@ private fun DocumentContent(
             listState,
 
         modifier =
-            modifier
-                .fillMaxSize()
-                .then(
-                    backgroundModifier
-                ),
+            modifier.fillMaxSize(),
 
         verticalArrangement =
             Arrangement.spacedBy(
@@ -512,7 +509,10 @@ private fun DocumentContent(
                     style =
                         MaterialTheme
                             .typography
-                            .headlineMedium
+                            .headlineMedium,
+
+                    fontWeight =
+                        FontWeight.Bold
                 )
 
                 document.author?.let {
@@ -556,7 +556,10 @@ private fun DocumentContent(
                     style =
                         MaterialTheme
                             .typography
-                            .titleLarge
+                            .titleLarge,
+
+                    fontWeight =
+                        FontWeight.SemiBold
                 )
 
                 Text(
