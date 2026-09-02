@@ -2,8 +2,9 @@ package com.coeric.universalreader
 
 import android.content.Context
 import android.net.Uri
-import org.xmlpull.v1.XmlPullParser
 import android.util.Xml
+import org.xmlpull.v1.XmlPullParser
+import java.io.InputStream
 
 object Fb2Reader {
 
@@ -15,333 +16,436 @@ object Fb2Reader {
         val input =
             context.contentResolver
                 .openInputStream(uri)
-                ?: throw IllegalStateException(
+                ?: throw IllegalArgumentException(
                     "Unable to open FB2 file."
                 )
 
         input.use {
-
-            val parser =
-                Xml.newPullParser()
-
-            parser.setInput(
-                it,
-                null
-            )
-
-            var title: String? = null
-            var author: String? = null
-
-            val chapters =
-                mutableListOf<ReaderChapter>()
-
-            var currentChapterTitle =
-                "Chapter 1"
-
-            val currentText =
-                StringBuilder()
-
-            var insideBookTitle =
-                false
-
-            var insideAuthor =
-                false
-
-            var insideSection =
-                false
-
-            var chapterNumber =
-                1
-
-            while (true) {
-
-                when (
-                    parser.eventType
-                ) {
-
-                    XmlPullParser.START_TAG -> {
-
-                        when (
-                            parser.name
-                                .lowercase()
-                        ) {
-
-                            "book-title" -> {
-                                insideBookTitle = true
-                            }
-
-                            "first-name",
-                            "middle-name",
-                            "last-name" -> {
-
-                                if (
-                                    insideAuthor
-                                ) {
-
-                                    val value =
-                                        parser.nextText()
-                                            .trim()
-
-                                    if (
-                                        value.isNotBlank()
-                                    ) {
-
-                                        if (
-                                            author == null
-                                        ) {
-                                            author = value
-                                        } else {
-                                            author +=
-                                                " $value"
-                                        }
-                                    }
-                                }
-                            }
-
-                            "author" -> {
-                                insideAuthor = true
-                            }
-
-                            "section" -> {
-
-                                if (
-                                    insideSection &&
-                                    currentText
-                                        .isNotBlank()
-                                ) {
-
-                                    chapters.add(
-                                        ReaderChapter(
-                                            title =
-                                                currentChapterTitle,
-                                            content =
-                                                currentText
-                                                    .toString()
-                                                    .trim()
-                                        )
-                                    )
-
-                                    currentText.clear()
-                                    chapterNumber++
-                                }
-
-                                insideSection = true
-
-                                currentChapterTitle =
-                                    "Chapter $chapterNumber"
-                            }
-
-                            "title" -> {
-
-                                if (
-                                    insideSection
-                                ) {
-
-                                    val sectionTitle =
-                                        readSectionTitle(
-                                            parser
-                                        )
-
-                                    if (
-                                        sectionTitle
-                                            .isNotBlank()
-                                    ) {
-
-                                        currentChapterTitle =
-                                            sectionTitle
-                                    }
-                                }
-                            }
-
-                            "p" -> {
-
-                                if (
-                                    insideSection
-                                ) {
-
-                                    val paragraph =
-                                        parser.nextText()
-                                            .trim()
-
-                                    if (
-                                        paragraph
-                                            .isNotBlank()
-                                    ) {
-
-                                        if (
-                                            currentText
-                                                .isNotEmpty()
-                                        ) {
-
-                                            currentText.append(
-                                                "\n\n"
-                                            )
-                                        }
-
-                                        currentText.append(
-                                            paragraph
-                                        )
-                                    }
-                                }
-                            }
-
-                            "empty-line" -> {
-
-                                if (
-                                    insideSection
-                                ) {
-
-                                    currentText.append(
-                                        "\n\n"
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    XmlPullParser.TEXT -> {
-
-                        if (
-                            insideBookTitle
-                        ) {
-
-                            val value =
-                                parser.text.trim()
-
-                            if (
-                                value.isNotBlank()
-                            ) {
-                                title = value
-                            }
-                        }
-                    }
-
-                    XmlPullParser.END_TAG -> {
-
-                        when (
-                            parser.name
-                                .lowercase()
-                        ) {
-
-                            "book-title" -> {
-                                insideBookTitle = false
-                            }
-
-                            "author" -> {
-                                insideAuthor = false
-                            }
-
-                            "section" -> {
-
-                                if (
-                                    currentText
-                                        .isNotBlank()
-                                ) {
-
-                                    chapters.add(
-                                        ReaderChapter(
-                                            title =
-                                                currentChapterTitle,
-                                            content =
-                                                currentText
-                                                    .toString()
-                                                    .trim()
-                                        )
-                                    )
-
-                                    currentText.clear()
-                                    chapterNumber++
-                                }
-
-                                insideSection = false
-                            }
-                        }
-                    }
-
-                    XmlPullParser.END_DOCUMENT -> {
-                        break
-                    }
-                }
-
-                parser.next()
-            }
-
-            if (
-                chapters.isEmpty()
-            ) {
-
-                throw IllegalArgumentException(
-                    "No readable chapters were found in this FB2 file."
-                )
-            }
-
-            return ReaderDocument(
-                title =
-                    title?.takeIf {
-                        it.isNotBlank()
-                    }
-                        ?: "FB2 Book",
-
-                author =
-                    author?.takeIf {
-                        it.isNotBlank()
-                    },
-
-                chapters =
-                    chapters
+            return parse(
+                context,
+                uri,
+                it
             )
         }
     }
 
-    private fun readSectionTitle(
+    private fun parse(
+        context: Context,
+        uri: Uri,
+        input: InputStream
+    ): ReaderDocument {
+
+        val parser =
+            Xml.newPullParser()
+
+        parser.setInput(
+            input,
+            null
+        )
+
+        var title: String? = null
+        var author: String? = null
+
+        val chapters =
+            mutableListOf<ReaderChapter>()
+
+        var event =
+            parser.eventType
+
+        while (
+            event != XmlPullParser.END_DOCUMENT
+        ) {
+
+            if (
+                event == XmlPullParser.START_TAG
+            ) {
+
+                when (
+                    parser.name.lowercase()
+                ) {
+
+                    "book-title" -> {
+
+                        val value =
+                            readElementText(
+                                parser
+                            )
+
+                        if (
+                            title.isNullOrBlank() &&
+                            value.isNotBlank()
+                        ) {
+                            title = value
+                        }
+                    }
+
+                    "first-name" -> {
+
+                        val value =
+                            readElementText(
+                                parser
+                            )
+
+                        if (
+                            author.isNullOrBlank() &&
+                            value.isNotBlank()
+                        ) {
+                            author = value
+                        }
+                    }
+
+                    "section" -> {
+
+                        val chapter =
+                            readSection(
+                                parser,
+                                chapters.size + 1
+                            )
+
+                        if (
+                            chapter != null
+                        ) {
+                            chapters.add(
+                                chapter
+                            )
+                        }
+                    }
+                }
+            }
+
+            event =
+                parser.next()
+        }
+
+        if (chapters.isEmpty()) {
+
+            throw IllegalArgumentException(
+                "No readable sections were found in this FB2 file."
+            )
+        }
+
+        return ReaderDocument(
+            title =
+                title
+                    ?: getDocumentName(
+                        context,
+                        uri
+                    ),
+
+            author =
+                author,
+
+            chapters =
+                chapters
+        )
+    }
+
+    private fun readSection(
+        parser: XmlPullParser,
+        chapterNumber: Int
+    ): ReaderChapter? {
+
+        var title = ""
+
+        val paragraphs =
+            mutableListOf<String>()
+
+        var depth =
+            parser.depth
+
+        var event =
+            parser.next()
+
+        while (
+            event != XmlPullParser.END_DOCUMENT
+        ) {
+
+            if (
+                event == XmlPullParser.END_TAG &&
+                parser.depth < depth
+            ) {
+                break
+            }
+
+            if (
+                event == XmlPullParser.START_TAG
+            ) {
+
+                when (
+                    parser.name.lowercase()
+                ) {
+
+                    "title" -> {
+
+                        val value =
+                            readTitle(
+                                parser
+                            )
+
+                        if (
+                            title.isBlank() &&
+                            value.isNotBlank()
+                        ) {
+                            title = value
+                        }
+                    }
+
+                    "p" -> {
+
+                        val value =
+                            readElementText(
+                                parser
+                            )
+
+                        if (
+                            value.isNotBlank()
+                        ) {
+                            paragraphs.add(
+                                value
+                            )
+                        }
+                    }
+
+                    "empty-line" -> {
+
+                        if (
+                            paragraphs.isNotEmpty() &&
+                            paragraphs.last().isNotBlank()
+                        ) {
+                            paragraphs.add("")
+                        }
+                    }
+
+                    "subtitle",
+                    "epigraph",
+                    "text-author",
+                    "poem" -> {
+
+                        val value =
+                            readContainerText(
+                                parser
+                            )
+
+                        if (
+                            value.isNotBlank()
+                        ) {
+                            paragraphs.add(
+                                value
+                            )
+                        }
+                    }
+                }
+            }
+
+            event =
+                parser.next()
+        }
+
+        val content =
+            paragraphs
+                .joinToString("\n\n")
+                .replace(
+                    Regex("\n{3,}"),
+                    "\n\n"
+                )
+                .trim()
+
+        if (content.isBlank()) {
+            return null
+        }
+
+        return ReaderChapter(
+            title =
+                title.ifBlank {
+                    "Chapter $chapterNumber"
+                },
+
+            content =
+                content
+        )
+    }
+
+    private fun readTitle(
+        parser: XmlPullParser
+    ): String {
+
+        return readContainerText(
+            parser
+        )
+    }
+
+    private fun readContainerText(
         parser: XmlPullParser
     ): String {
 
         val builder =
             StringBuilder()
 
-        var depth =
+        val startDepth =
             parser.depth
 
-        while (true) {
-
+        var event =
             parser.next()
 
-            when (
-                parser.eventType
+        while (
+            event != XmlPullParser.END_DOCUMENT
+        ) {
+
+            if (
+                event == XmlPullParser.END_TAG &&
+                parser.depth < startDepth
+            ) {
+                break
+            }
+
+            if (
+                event == XmlPullParser.TEXT ||
+                event == XmlPullParser.CDSECT
             ) {
 
-                XmlPullParser.TEXT -> {
+                builder.append(
+                    parser.text
+                )
+            }
+
+            if (
+                event == XmlPullParser.START_TAG
+            ) {
+
+                val name =
+                    parser.name.lowercase()
+
+                if (
+                    name == "p" ||
+                    name == "v" ||
+                    name == "stanza" ||
+                    name == "subtitle" ||
+                    name == "text-author"
+                ) {
 
                     builder.append(
-                        parser.text
+                        "\n"
                     )
                 }
-
-                XmlPullParser.END_TAG -> {
-
-                    if (
-                        parser.depth <
-                        depth
-                    ) {
-                        break
-                    }
-                }
-
-                XmlPullParser.END_DOCUMENT -> {
-                    break
-                }
             }
+
+            event =
+                parser.next()
         }
 
-        return builder
-            .toString()
+        return cleanText(
+            builder.toString()
+        )
+    }
+
+    private fun readElementText(
+        parser: XmlPullParser
+    ): String {
+
+        val startDepth =
+            parser.depth
+
+        val builder =
+            StringBuilder()
+
+        var event =
+            parser.next()
+
+        while (
+            event != XmlPullParser.END_DOCUMENT
+        ) {
+
+            if (
+                event == XmlPullParser.END_TAG &&
+                parser.depth < startDepth
+            ) {
+                break
+            }
+
+            if (
+                event == XmlPullParser.TEXT ||
+                event == XmlPullParser.CDSECT
+            ) {
+
+                builder.append(
+                    parser.text
+                )
+            }
+
+            event =
+                parser.next()
+        }
+
+        return cleanText(
+            builder.toString()
+        )
+    }
+
+    private fun cleanText(
+        value: String
+    ): String {
+
+        return value
             .replace(
-                Regex(
-                    "\\s+"
-                ),
+                '\u00A0',
+                ' '
+            )
+            .replace(
+                "\r\n",
+                "\n"
+            )
+            .replace(
+                '\r',
+                '\n'
+            )
+            .replace(
+                Regex("[ \t]+"),
                 " "
             )
+            .replace(
+                Regex("\n{3,}"),
+                "\n\n"
+            )
             .trim()
+    }
+
+    private fun getDocumentName(
+        context: Context,
+        uri: Uri
+    ): String {
+
+        var name =
+            "FB2 Document"
+
+        context.contentResolver
+            .query(
+                uri,
+                arrayOf(
+                    android.provider.OpenableColumns.DISPLAY_NAME
+                ),
+                null,
+                null,
+                null
+            )
+            ?.use { cursor ->
+
+                if (cursor.moveToFirst()) {
+
+                    val index =
+                        cursor.getColumnIndex(
+                            android.provider.OpenableColumns.DISPLAY_NAME
+                        )
+
+                    if (index >= 0) {
+                        name =
+                            cursor.getString(index)
+                    }
+                }
+            }
+
+        return name.substringBeforeLast(
+            '.',
+            name
+        )
     }
 }
