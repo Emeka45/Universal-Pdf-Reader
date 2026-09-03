@@ -11,8 +11,10 @@ android {
 
     defaultConfig {
         applicationId = "com.coeric.universalreader"
+
         minSdk = 26
         targetSdk = 36
+
         versionCode = 1
         versionName = "1.0"
     }
@@ -44,9 +46,15 @@ dependencies {
         "androidx.activity:activity-compose:1.10.1"
     )
 
+    /*
+     * Compose BOM
+     *
+     * 2025.08.00 is compatible with
+     * compileSdk 36 / AGP 8.13.0.
+     */
     implementation(
         platform(
-            "androidx.compose:compose-bom:2026.08.00"
+            "androidx.compose:compose-bom:2025.08.00"
         )
     )
 
@@ -70,14 +78,23 @@ dependencies {
         "androidx.compose.material:material-icons-extended"
     )
 
+    /*
+     * CBR / RAR support
+     */
     implementation(
         "com.github.junrar:junrar:8.1.0"
     )
 
+    /*
+     * PDF text extraction and search
+     */
     implementation(
         "com.tom-roush:pdfbox-android:2.0.27.0"
     )
 
+    /*
+     * Compose tooling for debug builds
+     */
     debugImplementation(
         "androidx.compose.ui:ui-tooling"
     )
