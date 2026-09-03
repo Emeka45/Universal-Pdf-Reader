@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -16,23 +14,19 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ReaderSettingsPanel(
     settings: ReaderSettings,
-    onSettingsChanged: (ReaderSettings) -> Unit
+    onSettingsChanged:
+        (ReaderSettings) -> Unit
 ) {
 
     Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
         verticalArrangement =
-            Arrangement.spacedBy(16.dp)
+            Arrangement.spacedBy(12.dp)
     ) {
 
         Text(
-            text =
-                "Font size: ${
-                    settings.fontSize.toInt()
-                }sp"
+            "Font size: ${
+                settings.fontSize.toInt()
+            }sp"
         )
 
         Slider(
@@ -50,13 +44,12 @@ fun ReaderSettingsPanel(
         )
 
         Text(
-            text =
-                "Line spacing: ${
-                    String.format(
-                        "%.2f",
-                        settings.lineSpacing
-                    )
-                }"
+            "Line spacing: ${
+                String.format(
+                    "%.2f",
+                    settings.lineSpacing
+                )
+            }"
         )
 
         Slider(
@@ -70,7 +63,7 @@ fun ReaderSettingsPanel(
                 )
             },
             valueRange =
-                1.0f..2.5f
+                1f..2.5f
         )
 
         Text("Theme")
@@ -82,7 +75,7 @@ fun ReaderSettingsPanel(
                 Arrangement.spacedBy(8.dp)
         ) {
 
-            ReaderTheme.values().forEach {
+            ReaderTheme.entries.forEach {
                 theme ->
 
                 FilterChip(
@@ -109,7 +102,7 @@ fun ReaderSettingsPanel(
             }
         }
 
-        Text("Text alignment")
+        Text("Alignment")
 
         Row(
             modifier =
@@ -155,14 +148,15 @@ fun ReaderSettingsPanel(
             )
         }
 
-        Button(
-            onClick = {
-                onSettingsChanged(
-                    ReaderSettings()
-                )
+        androidx.compose.material3
+            .OutlinedButton(
+                onClick = {
+                    onSettingsChanged(
+                        ReaderSettings()
+                    )
+                }
+            ) {
+                Text("Reset")
             }
-        ) {
-            Text("Reset")
-        }
     }
 }
