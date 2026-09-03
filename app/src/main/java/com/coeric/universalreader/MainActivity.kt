@@ -7,6 +7,7 @@ package com.coeric.universalreader
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -30,13 +31,17 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -89,6 +94,28 @@ fun UniversalReaderHome() {
         mutableStateOf(false)
     }
 
+    var showMenu by remember {
+        mutableStateOf(false)
+    }
+
+    var showSearch by remember {
+        mutableStateOf(false)
+    }
+
+    var showSettings by remember {
+        mutableStateOf(false)
+    }
+
+    var searchQuery by remember {
+        mutableStateOf("")
+    }
+
+    var readerTheme by remember {
+        mutableStateOf(
+            ReaderTheme.LIGHT
+        )
+    }
+
     val filePickerLauncher =
         rememberLauncherForActivityResult(
             contract =
@@ -135,6 +162,38 @@ fun UniversalReaderHome() {
             }
         }
 
+    val folderPickerLauncher =
+        rememberLauncherForActivityResult(
+            contract =
+                ActivityResultContracts.OpenDocumentTree()
+        ) { uri: Uri? ->
+
+            if (uri != null) {
+
+                try {
+
+                    context.contentResolver
+                        .takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        )
+
+                } catch (
+                    exception: Exception
+                ) {
+                    // Some providers do not support
+                    // persistent tree permissions.
+                }
+
+                Toast.makeText(
+                    context,
+                    "Folder selected",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+
     fun openFile() {
 
         filePickerLauncher.launch(
@@ -156,278 +215,182 @@ fun UniversalReaderHome() {
     }
 
     val displayedBooks =
-        if (showFavorites) {
+        libraryBooks
+            .filter { book ->
 
-            libraryBooks.filter {
-                it.isFavorite
-            }
-
-        } else {
-
-            libraryBooks
-        }
-
-    Scaffold(
-
-        topBar = {
-
-            TopAppBar(
-
-                title = {
-                    Text(
-                        "Universal Reader"
-                    )
-                },
-
-                navigationIcon = {
-
-                    IconButton(
-                        onClick = {}
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.Menu,
-                            contentDescription =
-                                "Menu"
-                        )
-                    }
-                },
-
-                actions = {
-
-                    IconButton(
-                        onClick = {}
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.Search,
-                            contentDescription =
-                                "Search"
-                        )
-                    }
-
-                    IconButton(
-                        onClick = {}
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.Settings,
-                            contentDescription =
-                                "Settings"
-                        )
-                    }
+                if (showFavorites) {
+                    book.isFavorite
+                } else {
+                    true
                 }
-            )
-        }
+            }
+            .filter { book ->
 
-    ) { paddingValues ->
+                if (searchQuery.isBlank()) {
+                    true
+                } else {
 
-        LazyColumn(
-
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(
-                        paddingValues
-                    )
-                    .padding(
-                        horizontal = 16.dp
-                    )
-        ) {
-
-            item {
-
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            20.dp
+                    book.name.contains(
+                        searchQuery,
+                        ignoreCase = true
+                    ) ||
+                        book.extension.contains(
+                            searchQuery,
+                            ignoreCase = true
                         )
-                )
+                }
+            }
 
-                Text(
-                    text =
-                        "Your Library",
-                    style =
-                        MaterialTheme
-                            .typography
-                            .headlineMedium
-                )
+    UniversalReaderTheme(
+        readerTheme = readerTheme
+    ) {
 
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            8.dp
+        Scaffold(
+
+            topBar = {
+
+                TopAppBar(
+
+                    title = {
+                        Text(
+                            "Universal Reader"
                         )
-                )
+                    },
 
-                Text(
-                    text =
-                        "Read books and documents in one place.",
-                    style =
-                        MaterialTheme
-                            .typography
-                            .bodyLarge
-                )
+                    navigationIcon = {
 
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            20.dp
-                        )
+                        IconButton(
+                            onClick = {
+                                showMenu = true
+                            }
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Default.Menu,
+                                contentDescription =
+                                    "Menu"
+                            )
+                        }
+                    },
+
+                    actions = {
+
+                        IconButton(
+                            onClick = {
+                                showSearch = true
+                            }
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Default.Search,
+                                contentDescription =
+                                    "Search"
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                showSettings = true
+                            }
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Default.Settings,
+                                contentDescription =
+                                    "Settings"
+                            )
+                        }
+                    }
                 )
             }
 
-            item {
+        ) { paddingValues ->
 
-                Button(
-                    onClick = {
-                        openFile()
-                    },
-                    modifier =
-                        Modifier.fillMaxWidth()
-                ) {
+            LazyColumn(
 
-                    Icon(
-                        imageVector =
-                            Icons.Default.UploadFile,
-                        contentDescription =
-                            null
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(
+                            paddingValues
+                        )
+                        .padding(
+                            horizontal = 16.dp
+                        )
+            ) {
+
+                item {
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                20.dp
+                            )
+                    )
+
+                    Text(
+                        text =
+                            "Your Library",
+                        style =
+                            MaterialTheme
+                                .typography
+                                .headlineMedium
                     )
 
                     Spacer(
                         modifier =
-                            Modifier.padding(
-                                horizontal = 4.dp
+                            Modifier.height(
+                                8.dp
                             )
                     )
 
                     Text(
-                        "Open File"
-                    )
-                }
-
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            20.dp
-                        )
-                )
-            }
-
-            item {
-
-                Row(
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
-                    horizontalArrangement =
-                        Arrangement.SpaceBetween,
-
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    Text(
                         text =
-                            if (showFavorites) {
-                                "Favorites"
-                            } else {
-                                "Recent Books"
-                            },
+                            "Read books and documents in one place.",
                         style =
                             MaterialTheme
                                 .typography
-                                .titleLarge
+                                .bodyLarge
                     )
 
-                    IconButton(
-                        onClick = {
-
-                            showFavorites =
-                                !showFavorites
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                if (showFavorites) {
-                                    Icons.Default.Favorite
-                                } else {
-                                    Icons.Default.FavoriteBorder
-                                },
-                            contentDescription =
-                                "Favorites"
-                        )
-                    }
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                20.dp
+                            )
+                    )
                 }
-
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            10.dp
-                        )
-                )
-            }
-
-            if (displayedBooks.isEmpty()) {
 
                 item {
 
-                    Card(
+                    Button(
+                        onClick = {
+                            openFile()
+                        },
                         modifier =
                             Modifier.fillMaxWidth()
                     ) {
 
-                        Column(
+                        Icon(
+                            imageVector =
+                                Icons.Default.UploadFile,
+                            contentDescription =
+                                null
+                        )
+
+                        Spacer(
                             modifier =
                                 Modifier.padding(
-                                    20.dp
-                                ),
-                            horizontalAlignment =
-                                Alignment.CenterHorizontally
-                        ) {
+                                    horizontal = 4.dp
+                                )
+                        )
 
-                            Text(
-                                text =
-                                    if (
-                                        showFavorites
-                                    ) {
-                                        "No favorite books"
-                                    } else {
-                                        "Your library is empty"
-                                    },
-                                style =
-                                    MaterialTheme
-                                        .typography
-                                        .titleMedium
-                            )
-
-                            Spacer(
-                                modifier =
-                                    Modifier.height(
-                                        8.dp
-                                    )
-                            )
-
-                            Text(
-                                text =
-                                    if (
-                                        showFavorites
-                                    ) {
-                                        "Favorite books will appear here."
-                                    } else {
-                                        "Open a document to add it to your library."
-                                    },
-                                style =
-                                    MaterialTheme
-                                        .typography
-                                        .bodyMedium
-                            )
-                        }
+                        Text(
+                            "Open File"
+                        )
                     }
 
                     Spacer(
@@ -438,54 +401,53 @@ fun UniversalReaderHome() {
                     )
                 }
 
-            } else {
+                item {
 
-                items(
-                    items =
-                        displayedBooks,
-                    key = {
-                        it.uri
-                    }
-                ) { book ->
+                    Row(
 
-                    LibraryBookCard(
+                        modifier =
+                            Modifier.fillMaxWidth(),
 
-                        book =
-                            book,
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
 
-                        context =
-                            context,
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
 
-                        onFavorite = {
+                        Text(
+                            text =
+                                if (showFavorites) {
+                                    "Favorites"
+                                } else {
+                                    "Recent Books"
+                                },
+                            style =
+                                MaterialTheme
+                                    .typography
+                                    .titleLarge
+                        )
 
-                            LibraryRepository
-                                .toggleFavorite(
-                                    context,
-                                    book.uri
-                                )
+                        IconButton(
+                            onClick = {
 
-                            libraryBooks =
-                                LibraryRepository
-                                    .getBooks(
-                                        context
-                                    )
-                        },
+                                showFavorites =
+                                    !showFavorites
+                            }
+                        ) {
 
-                        onDelete = {
-
-                            LibraryRepository
-                                .removeBook(
-                                    context,
-                                    book.uri
-                                )
-
-                            libraryBooks =
-                                LibraryRepository
-                                    .getBooks(
-                                        context
-                                    )
+                            Icon(
+                                imageVector =
+                                    if (showFavorites) {
+                                        Icons.Default.Favorite
+                                    } else {
+                                        Icons.Default.FavoriteBorder
+                                    },
+                                contentDescription =
+                                    "Favorites"
+                            )
                         }
-                    )
+                    }
 
                     Spacer(
                         modifier =
@@ -494,68 +456,454 @@ fun UniversalReaderHome() {
                             )
                     )
                 }
-            }
 
-            item {
+                if (displayedBooks.isEmpty()) {
 
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            20.dp
+                    item {
+
+                        Card(
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+
+                            Column(
+                                modifier =
+                                    Modifier.padding(
+                                        20.dp
+                                    ),
+                                horizontalAlignment =
+                                    Alignment.CenterHorizontally
+                            ) {
+
+                                Text(
+                                    text =
+                                        if (
+                                            showFavorites
+                                        ) {
+                                            "No favorite books"
+                                        } else if (
+                                            searchQuery.isNotBlank()
+                                        ) {
+                                            "No matching books"
+                                        } else {
+                                            "Your library is empty"
+                                        },
+                                    style =
+                                        MaterialTheme
+                                            .typography
+                                            .titleMedium
+                                )
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(
+                                            8.dp
+                                        )
+                                )
+
+                                Text(
+                                    text =
+                                        if (
+                                            showFavorites
+                                        ) {
+                                            "Favorite books will appear here."
+                                        } else if (
+                                            searchQuery.isNotBlank()
+                                        ) {
+                                            "Try a different search term."
+                                        } else {
+                                            "Open a document to add it to your library."
+                                        },
+                                    style =
+                                        MaterialTheme
+                                            .typography
+                                            .bodyMedium
+                                )
+                            }
+                        }
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    20.dp
+                                )
                         )
-                )
+                    }
 
-                Text(
-                    text =
-                        "Quick Access",
-                    style =
-                        MaterialTheme
-                            .typography
-                            .titleLarge
-                )
+                } else {
 
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            12.dp
+                    items(
+                        items =
+                            displayedBooks,
+                        key = {
+                            it.uri
+                        }
+                    ) { book ->
+
+                        LibraryBookCard(
+
+                            book =
+                                book,
+
+                            context =
+                                context,
+
+                            onFavorite = {
+
+                                LibraryRepository
+                                    .toggleFavorite(
+                                        context,
+                                        book.uri
+                                    )
+
+                                libraryBooks =
+                                    LibraryRepository
+                                        .getBooks(
+                                            context
+                                        )
+                            },
+
+                            onDelete = {
+
+                                LibraryRepository
+                                    .removeBook(
+                                        context,
+                                        book.uri
+                                    )
+
+                                libraryBooks =
+                                    LibraryRepository
+                                        .getBooks(
+                                            context
+                                        )
+                            }
                         )
-                )
 
-                Row(
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    horizontalArrangement =
-                        Arrangement.spacedBy(
-                            10.dp
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    10.dp
+                                )
                         )
-                ) {
-
-                    QuickAccessCard(
-                        title =
-                            "Folders",
-                        icon =
-                            Icons.Default.Folder,
-                        modifier =
-                            Modifier.weight(1f)
-                    )
-
-                    QuickAccessCard(
-                        title =
-                            "Favorites",
-                        icon =
-                            Icons.Default.Favorite,
-                        modifier =
-                            Modifier.weight(1f)
-                    )
+                    }
                 }
 
-                Spacer(
-                    modifier =
-                        Modifier.height(
-                            24.dp
+                item {
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                20.dp
+                            )
+                    )
+
+                    Text(
+                        text =
+                            "Quick Access",
+                        style =
+                            MaterialTheme
+                                .typography
+                                .titleLarge
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                12.dp
+                            )
+                    )
+
+                    Row(
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        horizontalArrangement =
+                            Arrangement.spacedBy(
+                                10.dp
+                            )
+                    ) {
+
+                        QuickAccessCard(
+                            title =
+                                "Folders",
+                            icon =
+                                Icons.Default.Folder,
+                            modifier =
+                                Modifier.weight(1f),
+                            onClick = {
+                                folderPickerLauncher.launch(
+                                    null
+                                )
+                            }
                         )
-                )
+
+                        QuickAccessCard(
+                            title =
+                                "Favorites",
+                            icon =
+                                Icons.Default.Favorite,
+                            modifier =
+                                Modifier.weight(1f),
+                            onClick = {
+
+                                showFavorites =
+                                    true
+                            }
+                        )
+                    }
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(
+                                24.dp
+                            )
+                    )
+                }
             }
+        }
+
+        if (showMenu) {
+
+            AlertDialog(
+
+                onDismissRequest = {
+                    showMenu = false
+                },
+
+                title = {
+                    Text("Menu")
+                },
+
+                text = {
+
+                    Column {
+
+                        TextButton(
+                            onClick = {
+
+                                showFavorites = true
+                                showMenu = false
+                            },
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "View Favorites"
+                            )
+                        }
+
+                        TextButton(
+                            onClick = {
+
+                                showFavorites = false
+                                showMenu = false
+                                openFile()
+                            },
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "Open File"
+                            )
+                        }
+
+                        TextButton(
+                            onClick = {
+
+                                showMenu = false
+                                showSettings = true
+                            },
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "Settings"
+                            )
+                        }
+
+                        TextButton(
+                            onClick = {
+
+                                showMenu = false
+                                showSearch = true
+                            },
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "Search Library"
+                            )
+                        }
+                    }
+                },
+
+                confirmButton = {
+
+                    TextButton(
+                        onClick = {
+                            showMenu = false
+                        }
+                    ) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
+
+        if (showSearch) {
+
+            AlertDialog(
+
+                onDismissRequest = {
+                    showSearch = false
+                    searchQuery = ""
+                },
+
+                title = {
+                    Text("Search Library")
+                },
+
+                text = {
+
+                    OutlinedTextField(
+                        value =
+                            searchQuery,
+                        onValueChange = {
+                            searchQuery = it
+                        },
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = {
+                            Text(
+                                "Book or document name"
+                            )
+                        }
+                    )
+                },
+
+                confirmButton = {
+
+                    TextButton(
+                        onClick = {
+                            showSearch = false
+                        }
+                    ) {
+                        Text("Done")
+                    }
+                },
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            searchQuery = ""
+                        }
+                    ) {
+                        Text("Clear")
+                    }
+                }
+            )
+        }
+
+        if (showSettings) {
+
+            AlertDialog(
+
+                onDismissRequest = {
+                    showSettings = false
+                },
+
+                title = {
+                    Text("Reader Settings")
+                },
+
+                text = {
+
+                    Column {
+
+                        Text(
+                            text =
+                                "Choose the appearance used by the library.",
+                            style =
+                                MaterialTheme
+                                    .typography
+                                    .bodyMedium
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    16.dp
+                                )
+                        )
+
+                        Row(
+                            horizontalArrangement =
+                                Arrangement.spacedBy(
+                                    8.dp
+                                )
+                        ) {
+
+                            FilterChip(
+                                selected =
+                                    readerTheme ==
+                                        ReaderTheme.LIGHT,
+                                onClick = {
+                                    readerTheme =
+                                        ReaderTheme.LIGHT
+                                },
+                                label = {
+                                    Text("Light")
+                                }
+                            )
+
+                            FilterChip(
+                                selected =
+                                    readerTheme ==
+                                        ReaderTheme.DARK,
+                                onClick = {
+                                    readerTheme =
+                                        ReaderTheme.DARK
+                                },
+                                label = {
+                                    Text("Dark")
+                                }
+                            )
+                        }
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(
+                                    8.dp
+                                )
+                        )
+
+                        FilterChip(
+                            selected =
+                                readerTheme ==
+                                    ReaderTheme.SEPIA,
+                            onClick = {
+                                readerTheme =
+                                    ReaderTheme.SEPIA
+                            },
+                            label = {
+                                Text("Sepia")
+                            }
+                        )
+                    }
+                },
+
+                confirmButton = {
+
+                    TextButton(
+                        onClick = {
+                            showSettings = false
+                        }
+                    ) {
+                        Text("Done")
+                    }
+                }
+            )
         }
     }
 }
@@ -720,7 +1068,8 @@ private fun LibraryBookCard(
 fun QuickAccessCard(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
 ) {
 
     Card(
@@ -739,17 +1088,23 @@ fun QuickAccessCard(
                 Alignment.CenterHorizontally
         ) {
 
-            Icon(
-                imageVector =
-                    icon,
-                contentDescription =
-                    title
-            )
+            IconButton(
+                onClick =
+                    onClick
+            ) {
+
+                Icon(
+                    imageVector =
+                        icon,
+                    contentDescription =
+                        title
+                )
+            }
 
             Spacer(
                 modifier =
                     Modifier.height(
-                        8.dp
+                        4.dp
                     )
             )
 
