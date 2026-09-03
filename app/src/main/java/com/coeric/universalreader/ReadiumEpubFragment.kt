@@ -7,16 +7,19 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubDefaults
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
-import org.readium.r2.navigator.epub.Theme
 import org.readium.r2.navigator.epub.TextAlign
+import org.readium.r2.navigator.epub.Theme
 
-class ReadiumEpubFragment : Fragment(),
+class ReadiumEpubFragment :
+    Fragment(),
     EpubNavigatorFragment.Listener {
 
     private var navigatorContainerId: Int = 0
@@ -63,9 +66,10 @@ class ReadiumEpubFragment : Fragment(),
         if (
             childFragmentManager
                 .findFragmentByTag(
-                    "readium_epub_navigator"
+                    NAVIGATOR_TAG
                 ) != null
         ) {
+            observeNavigator()
             return
         }
 
@@ -80,118 +84,172 @@ class ReadiumEpubFragment : Fragment(),
         val uri =
             Uri.parse(uriString)
 
-        lifecycleScope.launch {
-
-            val context =
-                requireContext()
+        viewLifecycleOwner.lifecycleScope.launch {
 
             val result =
                 ReadiumEpubRepository.open(
-                    context = context,
+                    context = requireContext(),
                     uri = uri
                 )
 
-            result
-                .onSuccess { publication ->
+            result.onSuccess { publication ->
 
-                    if (!isAdded) {
-                        return@onSuccess
-                    }
+                if (!isAdded) {
+                    return@onSuccess
+                }
 
-                    val savedSettings =
-                        ReaderSettingsRepository.get(
-                            context,
-                            uri.toString()
+                val savedLocator =
+                    ReadiumReadingPositionRepository.get(
+                        context = requireContext(),
+                        documentUri = uri.toString()
+                    )
+
+                val savedSettings =
+                    ReaderSettingsRepository.get(
+                        context = requireContext(),
+                        documentUri = uri.toString()
+                    )
+
+                val preferences =
+                    EpubPreferences(
+
+                        fontSize =
+                            savedSettings
+                                .fontSize
+                                .toDouble(),
+
+                        lineHeight =
+                            savedSettings
+                                .lineSpacing
+                                .toDouble(),
+
+                        pageMargins = 1.2,
+
+                        scroll = true,
+
+                        publisherStyles = true,
+
+                        theme =
+                            when (
+                                savedSettings.theme
+                            ) {
+
+                                ReaderTheme.LIGHT ->
+                                    Theme.LIGHT
+
+                                ReaderTheme.DARK ->
+                                    Theme.DARK
+
+                                ReaderTheme.SEPIA ->
+                                    Theme.SEPIA
+                            },
+
+                        textAlign =
+                            when (
+                                savedSettings.textAlignment
+                            ) {
+
+                                ReaderTextAlignment.LEFT ->
+                                    TextAlign.LEFT
+
+                                ReaderTextAlignment.JUSTIFY ->
+                                    TextAlign.JUSTIFY
+                            }
+                    )
+
+                val navigatorFactory =
+                    EpubNavigatorFactory(
+                        publication = publication,
+
+                        configuration =
+                            EpubNavigatorFactory.Configuration(
+
+                                defaults =
+                                    EpubDefaults(
+                                        scroll = true,
+                                        pageMargins = 1.2
+                                    )
+                            )
+                    )
+
+                childFragmentManager
+                    .fragmentFactory =
+                    navigatorFactory
+                        .createFragmentFactory(
+
+                            initialLocator =
+                                savedLocator,
+
+                            initialPreferences =
+                                preferences,
+
+                            listener =
+                                this@ReadiumEpubFragment
                         )
 
-                    val initialPreferences =
-                        EpubPreferences(
-                            fontSize =
-                                savedSettings.fontSize
-                                    .toDouble(),
-
-                            lineHeight =
-                                savedSettings.lineSpacing
-                                    .toDouble(),
-
-                            pageMargins = 1.2,
-
-                            scroll = true,
-
-                            publisherStyles = true,
-
-                            theme =
-                                when (
-                                    savedSettings.theme
-                                ) {
-
-                                    ReaderTheme.LIGHT ->
-                                        Theme.LIGHT
-
-                                    ReaderTheme.DARK ->
-                                        Theme.DARK
-
-                                    ReaderTheme.SEPIA ->
-                                        Theme.SEPIA
-                                },
-
-                            textAlign =
-                                when (
-                                    savedSettings.textAlignment
-                                ) {
-
-                                    ReaderTextAlignment.LEFT ->
-                                        TextAlign.LEFT
-
-                                    ReaderTextAlignment.JUSTIFY ->
-                                        TextAlign.JUSTIFY
-                                }
-                        )
-
-                    val navigatorFactory =
-                        EpubNavigatorFactory(
-                            publication = publication,
-
-                            configuration =
-                                EpubNavigatorFactory.Configuration(
-
-                                    defaults =
-                                        EpubDefaults(
-                                            scroll = true,
-                                            pageMargins = 1.2
-                                        )
-                                )
-                        )
+                if (
+                    childFragmentManager
+                        .findFragmentByTag(
+                            NAVIGATOR_TAG
+                        ) == null
+                ) {
 
                     childFragmentManager
-                        .fragmentFactory =
-                        navigatorFactory
-                            .createFragmentFactory(
-                                initialLocator = null,
+                        .beginTransaction()
+                        .replace(
+                            navigatorContainerId,
+                            EpubNavigatorFragment::class.java,
+                            Bundle(),
+                            NAVIGATOR_TAG
+                        )
+                        .commitNow()
+                }
 
-                                initialPreferences =
-                                    initialPreferences,
+                observeNavigator()
+            }
+        }
+    }
 
-                                listener =
-                                    this@ReadiumEpubFragment
-                            )
+    private fun observeNavigator() {
 
-                    if (
+        viewLifecycleOwner.lifecycleScope.launch {
+
+            viewLifecycleOwner
+                .repeatOnLifecycle(
+                    Lifecycle.State.STARTED
+                ) {
+
+                    val navigator =
                         childFragmentManager
                             .findFragmentByTag(
-                                "readium_epub_navigator"
-                            ) == null
-                    ) {
-
-                        childFragmentManager
-                            .beginTransaction()
-                            .replace(
-                                navigatorContainerId,
-                                EpubNavigatorFragment::class.java,
-                                Bundle(),
-                                "readium_epub_navigator"
+                                NAVIGATOR_TAG
                             )
-                            .commitNow()
+                            as? EpubNavigatorFragment
+                            ?: return@repeatOnLifecycle
+
+                    launch {
+
+                        navigator
+                            .currentLocator
+                            .collect { locator ->
+
+                                val uriString =
+                                    arguments
+                                        ?.getString(
+                                            ARG_URI
+                                        )
+                                        ?: return@collect
+
+                                ReadiumReadingPositionRepository
+                                    .save(
+                                        context =
+                                            requireContext(),
+                                        documentUri =
+                                            uriString,
+                                        locator =
+                                            locator
+                                    )
+                            }
                     }
                 }
         }
@@ -201,6 +259,9 @@ class ReadiumEpubFragment : Fragment(),
 
         private const val ARG_URI =
             "readium_epub_uri"
+
+        private const val NAVIGATOR_TAG =
+            "readium_epub_navigator"
 
         fun newInstance(
             uri: Uri
