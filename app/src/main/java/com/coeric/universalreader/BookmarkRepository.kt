@@ -3,37 +3,37 @@ package com.coeric.universalreader
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.UUID
 
 object BookmarkRepository {
 
-    private const val PREFS =
+    private const val PREFS_NAME =
         "universal_reader_bookmarks"
 
-    private const val BOOKMARKS =
+    private const val KEY_BOOKMARKS =
         "bookmarks"
 
-    fun getBookmarks(
-        context: Context,
-        documentUri: String
+    fun getAll(
+        context: Context
     ): List<Bookmark> {
 
-        val json =
+        val preferences =
             context.getSharedPreferences(
-                PREFS,
+                PREFS_NAME,
                 Context.MODE_PRIVATE
-            ).getString(
-                BOOKMARKS,
-                null
             )
-                ?: return emptyList()
+
+        val json =
+            preferences.getString(
+                KEY_BOOKMARKS,
+                "[]"
+            ) ?: "[]"
 
         return try {
 
             val array =
                 JSONArray(json)
 
-            val result =
+            val bookmarks =
                 mutableListOf<Bookmark>()
 
             for (
@@ -43,7 +43,7 @@ object BookmarkRepository {
                 val item =
                     array.getJSONObject(index)
 
-                val bookmark =
+                bookmarks.add(
                     Bookmark(
                         id =
                             item.optString(
@@ -71,151 +71,101 @@ object BookmarkRepository {
                         createdAt =
                             item.optLong(
                                 "createdAt",
-                                0L
-                            )
-                    )
-
-                if (
-                    bookmark.documentUri ==
-                    documentUri
-                ) {
-                    result.add(bookmark)
-                }
-            }
-
-            result.sortedByDescending {
-                it.createdAt
-            }
-
-        } catch (
-            exception: Exception
-        ) {
-
-            emptyList()
-        }
-    }
-
-    fun addBookmark(
-        context: Context,
-        documentUri: String,
-        chapterIndex: Int,
-        title: String
-    ): Bookmark {
-
-        val allBookmarks =
-            getAllBookmarks(context)
-                .toMutableList()
-
-        val bookmark =
-            Bookmark(
-                id =
-                    UUID.randomUUID()
-                        .toString(),
-                documentUri =
-                    documentUri,
-                chapterIndex =
-                    chapterIndex,
-                title =
-                    title
-            )
-
-        allBookmarks.add(bookmark)
-
-        save(
-            context,
-            allBookmarks
-        )
-
-        return bookmark
-    }
-
-    fun removeBookmark(
-        context: Context,
-        bookmarkId: String
-    ) {
-
-        val remaining =
-            getAllBookmarks(context)
-                .filter {
-                    it.id != bookmarkId
-                }
-
-        save(
-            context,
-            remaining
-        )
-    }
-
-    private fun getAllBookmarks(
-        context: Context
-    ): List<Bookmark> {
-
-        val json =
-            context.getSharedPreferences(
-                PREFS,
-                Context.MODE_PRIVATE
-            ).getString(
-                BOOKMARKS,
-                null
-            )
-                ?: return emptyList()
-
-        return try {
-
-            val array =
-                JSONArray(json)
-
-            val result =
-                mutableListOf<Bookmark>()
-
-            for (
-                index in 0 until array.length()
-            ) {
-
-                val item =
-                    array.getJSONObject(index)
-
-                result.add(
-                    Bookmark(
-                        id =
-                            item.optString(
-                                "id"
-                            ),
-                        documentUri =
-                            item.optString(
-                                "documentUri"
-                            ),
-                        chapterIndex =
-                            item.optInt(
-                                "chapterIndex"
-                            ),
-                        title =
-                            item.optString(
-                                "title"
-                            ),
-                        note =
-                            item.optString(
-                                "note"
-                            ),
-                        createdAt =
-                            item.optLong(
-                                "createdAt"
+                                System.currentTimeMillis()
                             )
                     )
                 )
             }
 
-            result
+            bookmarks
 
         } catch (
             exception: Exception
         ) {
-
             emptyList()
         }
     }
 
-    private fun save(
+    fun getForDocument(
+        context: Context,
+        documentUri: String
+    ): List<Bookmark> {
+
+        return getAll(context)
+            .filter {
+                it.documentUri == documentUri
+            }
+            .sortedByDescending {
+                it.createdAt
+            }
+    }
+
+    fun add(
+        context: Context,
+        bookmark: Bookmark
+    ) {
+
+        val bookmarks =
+            getAll(context)
+                .toMutableList()
+
+        bookmarks.removeAll {
+            it.id == bookmark.id
+        }
+
+        bookmarks.add(bookmark)
+
+        saveAll(
+            context,
+            bookmarks
+        )
+    }
+
+    fun remove(
+        context: Context,
+        bookmarkId: String
+    ) {
+
+        val bookmarks =
+            getAll(context)
+                .filter {
+                    it.id != bookmarkId
+                }
+
+        saveAll(
+            context,
+            bookmarks
+        )
+    }
+
+    fun removeForDocument(
+        context: Context,
+        documentUri: String
+    ) {
+
+        val bookmarks =
+            getAll(context)
+                .filter {
+                    it.documentUri != documentUri
+                }
+
+        saveAll(
+            context,
+            bookmarks
+        )
+    }
+
+    fun clear(
+        context: Context
+    ) {
+
+        saveAll(
+            context,
+            emptyList()
+        )
+    }
+
+    private fun saveAll(
         context: Context,
         bookmarks: List<Bookmark>
     ) {
@@ -227,49 +177,52 @@ object BookmarkRepository {
             bookmark in bookmarks
         ) {
 
-            val item =
+            val objectJson =
                 JSONObject()
 
-            item.put(
+            objectJson.put(
                 "id",
                 bookmark.id
             )
 
-            item.put(
+            objectJson.put(
                 "documentUri",
                 bookmark.documentUri
             )
 
-            item.put(
+            objectJson.put(
                 "chapterIndex",
                 bookmark.chapterIndex
             )
 
-            item.put(
+            objectJson.put(
                 "title",
                 bookmark.title
             )
 
-            item.put(
+            objectJson.put(
                 "note",
                 bookmark.note
             )
 
-            item.put(
+            objectJson.put(
                 "createdAt",
                 bookmark.createdAt
             )
 
-            array.put(item)
+            array.put(
+                objectJson
+            )
         }
 
-        context.getSharedPreferences(
-            PREFS,
-            Context.MODE_PRIVATE
-        )
+        context
+            .getSharedPreferences(
+                PREFS_NAME,
+                Context.MODE_PRIVATE
+            )
             .edit()
             .putString(
-                BOOKMARKS,
+                KEY_BOOKMARKS,
                 array.toString()
             )
             .apply()
