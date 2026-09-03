@@ -6,13 +6,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,11 +57,11 @@ fun SelectableHighlightText(
 
     val selectedText =
         if (
-            selection.start !=
-                selection.end &&
+            selection.start != selection.end &&
             selection.start >= 0 &&
-            selection.end <=
-                textFieldValue.text.length
+            selection.end >= 0 &&
+            selection.start <= textFieldValue.text.length &&
+            selection.end <= textFieldValue.text.length
         ) {
 
             val start =
@@ -98,22 +97,24 @@ fun SelectableHighlightText(
             value =
                 textFieldValue,
 
-            onValueChange = {
-                newValue ->
+            onValueChange = { newValue ->
 
                 textFieldValue =
-                    newValue.copy(
-                        text = text
-                    )
+                    if (
+                        newValue.text == text
+                    ) {
+                        newValue
+                    } else {
+                        newValue.copy(
+                            text = text
+                        )
+                    }
             },
 
             readOnly = true,
 
             textStyle =
                 textStyle,
-
-            keyboardOptions =
-                KeyboardOptions.Default,
 
             modifier =
                 Modifier.fillMaxWidth(),
@@ -130,6 +131,7 @@ fun SelectableHighlightText(
         ) {
 
             Row(
+
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -150,8 +152,7 @@ fun SelectableHighlightText(
                 ) {
 
                     Text(
-                        text =
-                            "Highlight"
+                        text = "Highlight"
                     )
                 }
 
@@ -180,6 +181,7 @@ fun SelectableHighlightText(
     ) {
 
         HighlightNoteDialog(
+
             selectedText =
                 selectedText,
 
@@ -189,10 +191,10 @@ fun SelectableHighlightText(
                     false
             },
 
-            onSave = {
-                note ->
+            onSave = { note ->
 
                 HighlightRepository.addHighlight(
+
                     context =
                         context,
 
