@@ -4,7 +4,8 @@ data class ReaderSettings(
     val fontSize: Float = 18f,
     val lineSpacing: Float = 1.55f,
     val theme: ReaderTheme = ReaderTheme.LIGHT,
-    val textAlignment: ReaderTextAlignment = ReaderTextAlignment.LEFT
+    val textAlignment: ReaderTextAlignment =
+        ReaderTextAlignment.LEFT
 )
 
 enum class ReaderTheme {
