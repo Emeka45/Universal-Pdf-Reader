@@ -8,7 +8,7 @@ data class ReaderSettings(
         ReaderTextAlignment.LEFT
 )
 
-enum class ReaderTheme {
+enum class ReaderTheme{
     LIGHT,
     DARK,
     SEPIA
