@@ -26,9 +26,6 @@ android {
         targetCompatibility =
             JavaVersion.VERSION_17
 
-        /*
-         * Required by Readium.
-         */
         isCoreLibraryDesugaringEnabled = true
     }
 
@@ -78,7 +75,17 @@ dependencies {
     )
 
     /*
+     * Fragment support for hosting
+     * Readium's navigator inside Compose.
+     */
+    implementation(
+        "androidx.fragment:fragment-compose:1.8.9"
+    )
+
+    /*
      * READIUM KOTLIN TOOLKIT 3.1.0
+     *
+     * Professional EPUB engine.
      */
     implementation(
         "org.readium.kotlin-toolkit:readium-shared:3.1.0"
@@ -93,14 +100,15 @@ dependencies {
     )
 
     /*
-     * Required for Java 8+ API desugaring.
+     * Required by Readium for
+     * Java API desugaring.
      */
     coreLibraryDesugaring(
         "com.android.tools:desugar_jdk_libs:2.1.5"
     )
 
     /*
-     * CBR support.
+     * Existing CBR support.
      */
     implementation(
         "com.github.junrar:junrar:8.1.0"
