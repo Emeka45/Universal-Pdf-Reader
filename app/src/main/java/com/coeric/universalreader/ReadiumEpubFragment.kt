@@ -12,6 +12,9 @@ import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubDefaults
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.navigator.epub.Theme
+import org.readium.r2.navigator.epub.TextAlign
 
 class ReadiumEpubFragment : Fragment(),
     EpubNavigatorFragment.Listener {
@@ -79,9 +82,12 @@ class ReadiumEpubFragment : Fragment(),
 
         lifecycleScope.launch {
 
+            val context =
+                requireContext()
+
             val result =
                 ReadiumEpubRepository.open(
-                    context = requireContext(),
+                    context = context,
                     uri = uri
                 )
 
@@ -92,9 +98,60 @@ class ReadiumEpubFragment : Fragment(),
                         return@onSuccess
                     }
 
+                    val savedSettings =
+                        ReaderSettingsRepository.get(
+                            context,
+                            uri.toString()
+                        )
+
+                    val initialPreferences =
+                        EpubPreferences(
+                            fontSize =
+                                savedSettings.fontSize
+                                    .toDouble(),
+
+                            lineHeight =
+                                savedSettings.lineSpacing
+                                    .toDouble(),
+
+                            pageMargins = 1.2,
+
+                            scroll = true,
+
+                            publisherStyles = true,
+
+                            theme =
+                                when (
+                                    savedSettings.theme
+                                ) {
+
+                                    ReaderTheme.LIGHT ->
+                                        Theme.LIGHT
+
+                                    ReaderTheme.DARK ->
+                                        Theme.DARK
+
+                                    ReaderTheme.SEPIA ->
+                                        Theme.SEPIA
+                                },
+
+                            textAlign =
+                                when (
+                                    savedSettings.textAlignment
+                                ) {
+
+                                    ReaderTextAlignment.LEFT ->
+                                        TextAlign.LEFT
+
+                                    ReaderTextAlignment.JUSTIFY ->
+                                        TextAlign.JUSTIFY
+                                }
+                        )
+
                     val navigatorFactory =
                         EpubNavigatorFactory(
                             publication = publication,
+
                             configuration =
                                 EpubNavigatorFactory.Configuration(
 
@@ -111,7 +168,12 @@ class ReadiumEpubFragment : Fragment(),
                         navigatorFactory
                             .createFragmentFactory(
                                 initialLocator = null,
-                                listener = this@ReadiumEpubFragment
+
+                                initialPreferences =
+                                    initialPreferences,
+
+                                listener =
+                                    this@ReadiumEpubFragment
                             )
 
                     if (
