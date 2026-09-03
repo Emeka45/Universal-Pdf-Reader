@@ -50,7 +50,11 @@ import java.util.UUID
 @Composable
 fun EpubReaderScreen(
     uri: Uri,
-    onBack: () -> Unit
+    onBack: () -> Unit = {
+        (androidx.compose.ui.platform.LocalContext.current
+            as? android.app.Activity)
+            ?.finish()
+    }
 ) {
 
     val context =
@@ -263,6 +267,7 @@ fun EpubReaderScreen(
                 Button(
                     onClick = onBack
                 ) {
+
                     Text("Back")
                 }
             }
@@ -588,6 +593,7 @@ fun EpubReaderScreen(
                         showSettings = false
                     }
                 ) {
+
                     Text("Done")
                 }
             }
@@ -743,6 +749,7 @@ private fun EpubSearchDialog(
             TextButton(
                 onClick = onDismiss
             ) {
+
                 Text("Close")
             }
         }
@@ -820,6 +827,7 @@ private fun EpubChapterDialog(
             TextButton(
                 onClick = onDismiss
             ) {
+
                 Text("Close")
             }
         }
@@ -921,6 +929,7 @@ private fun EpubBookmarkDialog(
             TextButton(
                 onClick = onDismiss
             ) {
+
                 Text("Close")
             }
         }
@@ -999,6 +1008,7 @@ private fun AddEpubBookmarkDialog(
             TextButton(
                 onClick = onDismiss
             ) {
+
                 Text("Cancel")
             }
         },
@@ -1007,6 +1017,7 @@ private fun AddEpubBookmarkDialog(
 
             Button(
                 onClick = {
+
                     onSave(
                         title.ifBlank {
                             "Bookmark"
@@ -1015,6 +1026,7 @@ private fun AddEpubBookmarkDialog(
                     )
                 }
             ) {
+
                 Text("Save")
             }
         }
