@@ -20,12 +20,33 @@ object MobiFormatDetector {
             mobiHeaderOffset + 68 <= bytes.size
         ) {
 
+            /*
+             * MOBI header:
+             *
+             * +00  "MOBI"
+             * +04  Header length
+             * +08  MOBI type
+             * +12  Text encoding
+             *
+             * Because the MOBI header starts with the
+             * 4-byte "MOBI" identifier, the MOBI type
+             * is at offset +16 from the beginning of
+             * the MOBI identifier.
+             *
+             * In the existing reader code we use the
+             * absolute MOBI-header offset, so the type
+             * field is read at +16.
+             */
             val mobiType =
                 readUInt32(
                     bytes,
-                    mobiHeaderOffset + 24
+                    mobiHeaderOffset + 16
                 )
 
+            /*
+             * MOBI type 2 = Mobipocket book / PalmDOC
+             * MOBI type 8 = KF8
+             */
             isKf8 =
                 mobiType == 0x00000008
 
@@ -49,11 +70,21 @@ object MobiFormatDetector {
                     exthOffset
                 )
 
+            /*
+             * EXTH 503 = title
+             * EXTH 100 = author
+             */
             title =
                 exthRecords[503]
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
 
             author =
                 exthRecords[100]
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
         }
 
         return MobiFormatInfo(
@@ -70,10 +101,26 @@ object MobiFormatDetector {
         mobiHeaderOffset: Int
     ): Int {
 
-        if (mobiHeaderOffset < 0) {
+        if (
+            mobiHeaderOffset < 0 ||
+            mobiHeaderOffset + 36 >
+            bytes.size
+        ) {
             return -1
         }
 
+        /*
+         * The EXTH flag is stored in the MOBI header.
+         *
+         * MOBI header + 0x80 (128) contains flags in
+         * the full MOBI header. However, older/smaller
+         * headers may not contain the complete field.
+         *
+         * For compatibility with the files currently
+         * supported by Universal Reader, perform a
+         * bounded search rather than scanning the whole
+         * file.
+         */
         val start =
             mobiHeaderOffset
 
@@ -83,18 +130,60 @@ object MobiFormatDetector {
                 mobiHeaderOffset + 4096
             )
 
+        if (end < start) {
+            return -1
+        }
+
         for (
             position in start..end
         ) {
 
             if (
-                bytes[position] == 'E'.code.toByte() &&
-                bytes[position + 1] == 'X'.code.toByte() &&
-                bytes[position + 2] == 'T'.code.toByte() &&
-                bytes[position + 3] == 'H'.code.toByte()
+                bytes[position] ==
+                'E'.code.toByte() &&
+                bytes[position + 1] ==
+                'X'.code.toByte() &&
+                bytes[position + 2] ==
+                'T'.code.toByte() &&
+                bytes[position + 3] ==
+                'H'.code.toByte()
             ) {
 
-                return position
+                /*
+                 * Validate the EXTH header before accepting
+                 * the location.
+                 *
+                 * EXTH:
+                 * +00 "EXTH"
+                 * +04 header length
+                 * +08 record count
+                 */
+                if (
+                    position + 12 <=
+                    bytes.size
+                ) {
+
+                    val headerLength =
+                        readUInt32(
+                            bytes,
+                            position + 4
+                        )
+
+                    val recordCount =
+                        readUInt32(
+                            bytes,
+                            position + 8
+                        )
+
+                    if (
+                        headerLength >= 12 &&
+                        recordCount >= 0 &&
+                        position + headerLength <=
+                        bytes.size
+                    ) {
+                        return position
+                    }
+                }
             }
         }
 
@@ -107,6 +196,7 @@ object MobiFormatDetector {
     ): Map<Int, String> {
 
         if (
+            offset < 0 ||
             offset + 12 >
             bytes.size
         ) {
@@ -118,6 +208,17 @@ object MobiFormatDetector {
                 bytes,
                 offset + 8
             )
+
+        /*
+         * Protect against malformed files containing
+         * an unreasonable record count.
+         */
+        if (
+            recordCount <= 0 ||
+            recordCount > 10_000
+        ) {
+            return emptyMap()
+        }
 
         val result =
             mutableMapOf<Int, String>()
@@ -172,7 +273,8 @@ object MobiFormatDetector {
                 )
 
             if (
-                !result.containsKey(type)
+                !result.containsKey(type) &&
+                value.isNotBlank()
             ) {
                 result[type] = value
             }
@@ -186,6 +288,10 @@ object MobiFormatDetector {
     private fun decodeText(
         bytes: ByteArray
     ): String {
+
+        if (bytes.isEmpty()) {
+            return ""
+        }
 
         return try {
 
