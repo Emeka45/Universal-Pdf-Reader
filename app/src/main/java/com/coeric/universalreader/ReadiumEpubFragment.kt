@@ -11,37 +11,51 @@ import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.publication.Publication
 
-class ReadiumEpubFragment(
-    private val publication: Publication
-) : Fragment(),
+class ReadiumEpubFragment : Fragment(),
     EpubNavigatorFragment.Listener {
+
+    private var publication: Publication? = null
 
     private val navigatorContainerId =
         View.generateViewId()
+
+    fun setPublication(
+        publication: Publication
+    ) {
+        this.publication = publication
+    }
 
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
 
-        val navigatorFactory =
-            EpubNavigatorFactory(
-                publication = publication,
-                configuration =
-                    EpubNavigatorFactory.Configuration(
-                        defaults =
-                            EpubDefaults(
-                                scroll = true
-                            )
-                    )
-            )
+        val currentPublication =
+            publication
 
-        childFragmentManager.fragmentFactory =
-            navigatorFactory.createFragmentFactory(
-                initialLocator = null,
-                listener = this
-            )
+        if (currentPublication != null) {
 
-        super.onCreate(savedInstanceState)
+            val navigatorFactory =
+                EpubNavigatorFactory(
+                    publication = currentPublication,
+                    configuration =
+                        EpubNavigatorFactory.Configuration(
+                            defaults =
+                                EpubDefaults(
+                                    scroll = true
+                                )
+                        )
+                )
+
+            childFragmentManager.fragmentFactory =
+                navigatorFactory.createFragmentFactory(
+                    initialLocator = null,
+                    listener = this
+                )
+        }
+
+        super.onCreate(
+            savedInstanceState
+        )
     }
 
     override fun onCreateView(
@@ -54,7 +68,8 @@ class ReadiumEpubFragment(
             requireContext()
         ).apply {
 
-            id = navigatorContainerId
+            id =
+                navigatorContainerId
 
             layoutParams =
                 ViewGroup.LayoutParams(
@@ -73,6 +88,10 @@ class ReadiumEpubFragment(
             view,
             savedInstanceState
         )
+
+        if (publication == null) {
+            return
+        }
 
         if (
             childFragmentManager
