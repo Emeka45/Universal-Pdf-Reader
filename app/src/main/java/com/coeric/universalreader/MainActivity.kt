@@ -283,10 +283,9 @@ fun UniversalReaderHome() {
             item {
 
                 Button(
-                    onClick =
-                        {
-                            openFile()
-                        },
+                    onClick = {
+                        openFile()
+                    },
                     modifier =
                         Modifier.fillMaxWidth()
                 ) {
@@ -778,7 +777,7 @@ private fun openReader(
         ).apply {
 
             putExtra(
-                "document_uri",
+                "uri",
                 uri
             )
         }
