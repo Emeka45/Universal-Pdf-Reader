@@ -50,6 +50,7 @@ fun ReaderDocumentScreen(
     document: ReaderDocument,
     documentUri: String
 ) {
+
     val context =
         androidx.compose.ui.platform.LocalContext.current
 
@@ -95,7 +96,7 @@ fun ReaderDocumentScreen(
 
     var bookmarks by remember(documentUri) {
         mutableStateOf(
-            BookmarkRepository.getBookmarks(
+            BookmarkRepository.getForDocument(
                 context,
                 documentUri
             )
@@ -185,7 +186,7 @@ fun ReaderDocumentScreen(
                 onAdded = {
 
                     bookmarks =
-                        BookmarkRepository.getBookmarks(
+                        BookmarkRepository.getForDocument(
                             context,
                             documentUri
                         )
@@ -511,13 +512,13 @@ fun ReaderDocumentScreen(
                         onDelete = {
                             bookmark ->
 
-                            BookmarkRepository.removeBookmark(
+                            BookmarkRepository.remove(
                                 context,
                                 bookmark.id
                             )
 
                             bookmarks =
-                                BookmarkRepository.getBookmarks(
+                                BookmarkRepository.getForDocument(
                                     context,
                                     documentUri
                                 )
@@ -587,7 +588,7 @@ fun ReaderDocumentScreen(
                         onBookmarkAdded = {
 
                             bookmarks =
-                                BookmarkRepository.getBookmarks(
+                                BookmarkRepository.getForDocument(
                                     context,
                                     documentUri
                                 )
@@ -620,6 +621,7 @@ private fun ChapterList(
     onChapterSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+
     LazyColumn(
         modifier =
             modifier.fillMaxSize()
@@ -672,7 +674,9 @@ private fun ChapterList(
                     Modifier
                         .fillMaxWidth()
                         .clickable {
-                            onChapterSelected(index)
+                            onChapterSelected(
+                                index
+                            )
                         }
                         .padding(
                             horizontal = 20.dp,
@@ -690,12 +694,15 @@ private fun BookmarkList(
     onDelete: (Bookmark) -> Unit,
     modifier: Modifier = Modifier
 ) {
+
     LazyColumn(
         modifier =
             modifier.fillMaxSize(),
 
         verticalArrangement =
-            Arrangement.spacedBy(8.dp)
+            Arrangement.spacedBy(
+                8.dp
+            )
     ) {
 
         item {
@@ -756,7 +763,8 @@ private fun BookmarkList(
             ) {
 
                 Text(
-                    text = bookmark.title,
+                    text =
+                        bookmark.title,
 
                     style =
                         MaterialTheme
@@ -804,12 +812,15 @@ private fun HighlightList(
     onDelete: (Highlight) -> Unit,
     modifier: Modifier = Modifier
 ) {
+
     LazyColumn(
         modifier =
             modifier.fillMaxSize(),
 
         verticalArrangement =
-            Arrangement.spacedBy(8.dp)
+            Arrangement.spacedBy(
+                8.dp
+            )
     ) {
 
         item {
@@ -945,6 +956,7 @@ private fun AddBookmarkDialog(
     onDismiss: () -> Unit,
     onAdded: () -> Unit
 ) {
+
     val context =
         androidx.compose.ui.platform.LocalContext.current
 
@@ -965,21 +977,26 @@ private fun AddBookmarkDialog(
             onDismiss,
 
         title = {
+
             Text(
-                text = "Add Bookmark"
+                text =
+                    "Add Bookmark"
             )
         },
 
         text = {
 
             TextField(
-                value = title,
+
+                value =
+                    title,
 
                 onValueChange = {
                     title = it
                 },
 
                 label = {
+
                     Text(
                         text =
                             "Bookmark title"
@@ -996,14 +1013,28 @@ private fun AddBookmarkDialog(
             Button(
                 onClick = {
 
-                    BookmarkRepository.addBookmark(
-                        context = context,
-                        documentUri = documentUri,
-                        chapterIndex = chapterIndex,
-                        title =
-                            title.ifBlank {
-                                "Bookmark"
-                            }
+                    BookmarkRepository.add(
+
+                        context,
+
+                        Bookmark(
+
+                            id =
+                                "${documentUri.hashCode()}_" +
+                                    "${chapterIndex}_" +
+                                    System.currentTimeMillis(),
+
+                            documentUri =
+                                documentUri,
+
+                            chapterIndex =
+                                chapterIndex,
+
+                            title =
+                                title.ifBlank {
+                                    "Bookmark"
+                                }
+                        )
                     )
 
                     onAdded()
@@ -1042,6 +1073,7 @@ private fun DocumentContent(
     onHighlightAdded: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+
     val context =
         androidx.compose.ui.platform.LocalContext.current
 
@@ -1050,33 +1082,37 @@ private fun DocumentContent(
 
     val savedPosition =
         remember(documentUri) {
+
             ReadingPositionRepository.get(
                 context,
                 documentUri
             )
         }
 
-    /*
-     * Restore saved position once.
-     */
     LaunchedEffect(savedPosition) {
 
         if (savedPosition != null) {
 
-            listState.scrollToItem(
+            val maxIndex =
+                (
+                    document.chapters.size
+                ).coerceAtLeast(0)
 
+            val scrollIndex =
                 savedPosition.scrollIndex
-                    .coerceAtLeast(0),
+                    .coerceIn(
+                        0,
+                        maxIndex
+                    )
 
+            listState.scrollToItem(
+                scrollIndex,
                 savedPosition.scrollOffset
                     .coerceAtLeast(0)
             )
         }
     }
 
-    /*
-     * Jump to selected chapter.
-     */
     LaunchedEffect(selectedChapter) {
 
         if (
@@ -1097,9 +1133,6 @@ private fun DocumentContent(
         }
     }
 
-    /*
-     * Determine current chapter.
-     */
     LaunchedEffect(
         listState.firstVisibleItemIndex
     ) {
@@ -1130,9 +1163,6 @@ private fun DocumentContent(
         }
     }
 
-    /*
-     * Save reading position.
-     */
     LaunchedEffect(
         listState.firstVisibleItemIndex,
         listState.firstVisibleItemScrollOffset,
@@ -1142,6 +1172,8 @@ private fun DocumentContent(
         ReadingPositionRepository.save(
 
             context,
+
+            documentUri,
 
             ReadingPosition(
 
@@ -1178,9 +1210,6 @@ private fun DocumentContent(
             modifier.fillMaxSize()
     ) {
 
-        /*
-         * Reading progress.
-         */
         ReadingProgress(
             currentItem =
                 currentItem,
@@ -1211,7 +1240,7 @@ private fun DocumentContent(
                     (
                         settings.fontSize *
                             settings.lineSpacing
-                        ).sp,
+                    ).sp,
 
                 textAlign =
                     alignment,
@@ -1323,11 +1352,16 @@ private fun DocumentContent(
 
                             onClick = {
 
-                                BookmarkRepository
-                                    .addBookmark(
+                                BookmarkRepository.add(
 
-                                        context =
-                                            context,
+                                    context,
+
+                                    Bookmark(
+
+                                        id =
+                                            "${documentUri.hashCode()}_" +
+                                                "${index}_" +
+                                                System.currentTimeMillis(),
 
                                         documentUri =
                                             documentUri,
@@ -1338,6 +1372,7 @@ private fun DocumentContent(
                                         title =
                                             chapter.title
                                     )
+                                )
 
                                 onBookmarkAdded()
                             }
@@ -1388,6 +1423,7 @@ private fun DocumentSearchPanel(
     onChapterSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+
     var query by remember {
         mutableStateOf("")
     }
@@ -1453,6 +1489,13 @@ private fun DocumentSearchPanel(
                                             start,
                                             end
                                         )
+                                        .replace(
+                                            Regex(
+                                                "\\s+"
+                                            ),
+                                            " "
+                                        )
+                                        .trim()
                             )
                         }
                     }
@@ -1467,12 +1510,15 @@ private fun DocumentSearchPanel(
                 .padding(20.dp),
 
         verticalArrangement =
-            Arrangement.spacedBy(12.dp)
+            Arrangement.spacedBy(
+                12.dp
+            )
     ) {
 
         TextField(
 
-            value = query,
+            value =
+                query,
 
             onValueChange = {
                 query = it
@@ -1572,9 +1618,12 @@ private fun saveChapterPosition(
     documentUri: String,
     chapterIndex: Int
 ) {
+
     ReadingPositionRepository.save(
 
         context,
+
+        documentUri,
 
         ReadingPosition(
 
