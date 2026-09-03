@@ -25,9 +25,15 @@ object Kf8Reader {
             )
         }
 
+        val mobiHeaderOffset =
+            findMobiHeaderOffset(
+                bytes
+            )
+
         val formatInfo =
             MobiFormatDetector.detect(
-                bytes
+                bytes,
+                mobiHeaderOffset
             )
 
         val rawText =
@@ -71,6 +77,44 @@ object Kf8Reader {
             chapters =
                 chapters
         )
+    }
+
+    private fun findMobiHeaderOffset(
+        bytes: ByteArray
+    ): Int {
+
+        val target =
+            "MOBI".toByteArray(
+                Charsets.US_ASCII
+            )
+
+        if (
+            target.isEmpty() ||
+            target.size > bytes.size
+        ) {
+            return -1
+        }
+
+        outer@ for (
+            index in 0..bytes.size - target.size
+        ) {
+
+            for (
+                offset in target.indices
+            ) {
+
+                if (
+                    bytes[index + offset] !=
+                    target[offset]
+                ) {
+                    continue@outer
+                }
+            }
+
+            return index
+        }
+
+        return -1
     }
 
     private fun extractReadableText(
