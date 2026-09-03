@@ -2,15 +2,12 @@ package com.coeric.universalreader
 
 import android.content.Context
 import android.net.Uri
-import com.github.readium.kotlin.toolkit.extensions.toUrl
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.util.AbsoluteUrl
+import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
-import org.readium.r2.shared.util.http.HttpClient
 import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
-import org.readium.r2.streamer.parser.PublicationParser
-import org.readium.r2.shared.util.asset.AssetRetriever
-import org.readium.r2.shared.util.asset.FileAsset
 
 object ReadiumEpubRepository {
 
@@ -36,7 +33,8 @@ object ReadiumEpubRepository {
                 DefaultPublicationParser(
                     context = context,
                     httpClient = httpClient,
-                    assetRetriever = assetRetriever
+                    assetRetriever = assetRetriever,
+                    pdfFactory = null
                 )
 
             val publicationOpener =
@@ -46,17 +44,15 @@ object ReadiumEpubRepository {
                 )
 
             val url =
-                uri.toString()
+                AbsoluteUrl(
+                    uri.toString()
+                )
 
             val asset =
                 assetRetriever
-                    .retrieve(
-                        url
-                    )
+                    .retrieve(url)
                     .getOrElse {
-                        return Result.failure(
-                            it
-                        )
+                        return Result.failure(it)
                     }
 
             publicationOpener
