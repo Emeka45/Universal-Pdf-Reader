@@ -20,6 +20,9 @@ object CbrReader {
                 context.cacheDir
             )
 
+        val extractedPages =
+            mutableListOf<ComicPage>()
+
         try {
 
             copyUriToFile(
@@ -27,9 +30,6 @@ object CbrReader {
                 uri,
                 temporaryFile
             )
-
-            val pages =
-                mutableListOf<ComicPage>()
 
             Archive(
                 temporaryFile
@@ -44,7 +44,7 @@ object CbrReader {
                     }
 
                     val name =
-                        header.fileNameString
+                        header.fileName
 
                     if (!isImageFile(name)) {
                         continue
@@ -69,7 +69,7 @@ object CbrReader {
                             )
                         }
 
-                        pages.add(
+                        extractedPages.add(
                             ComicPage(
                                 name = name,
                                 file = pageFile
@@ -87,7 +87,7 @@ object CbrReader {
                 }
             }
 
-            pages.sortWith(
+            extractedPages.sortWith(
                 Comparator { first, second ->
                     naturalCompare(
                         first.name,
@@ -97,9 +97,17 @@ object CbrReader {
             )
 
             return ComicArchive(
-                pages = pages,
+                pages = extractedPages,
                 format = ComicArchiveFormat.CBR
             )
+
+        } catch (exception: Exception) {
+
+            extractedPages.forEach { page ->
+                page.file.delete()
+            }
+
+            throw exception
 
         } finally {
 
