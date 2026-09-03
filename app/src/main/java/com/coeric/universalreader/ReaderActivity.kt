@@ -155,62 +155,7 @@ private fun ReadiumEpubContent(
     val activity =
         context as? FragmentActivity
 
-    var publication by remember {
-        mutableStateOf<
-            org.readium.r2.shared.publication.Publication?
-        >(null)
-    }
-
-    var error by remember {
-        mutableStateOf<String?>(null)
-    }
-
-    LaunchedEffect(uri) {
-
-        try {
-
-            val result =
-                ReadiumEpubRepository.open(
-                    context = context,
-                    uri = uri
-                )
-
-            result
-                .onSuccess {
-                    publication = it
-                }
-                .onFailure {
-
-                    error =
-                        it.message
-                            ?: "Unable to open EPUB with Readium."
-                }
-
-        } catch (
-            exception: Exception
-        ) {
-
-            error =
-                exception.message
-                    ?: "Unable to open EPUB."
-        }
-    }
-
     when {
-
-        error != null -> {
-
-            ErrorScreen(
-                message =
-                    error
-                        ?: "Unable to open EPUB."
-            )
-        }
-
-        publication == null -> {
-
-            LoadingScreen()
-        }
 
         activity == null -> {
 
@@ -223,7 +168,7 @@ private fun ReadiumEpubContent(
         else -> {
 
             ReadiumEpubScreen(
-                publication = publication!!,
+                uri = uri,
                 activity = activity,
                 modifier =
                     Modifier.fillMaxSize()
