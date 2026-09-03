@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -14,12 +15,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
@@ -30,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -110,13 +108,51 @@ fun PdfReaderView(
         mutableStateOf<String?>(null)
     }
 
+    fun resetZoom() {
+
+        zoom = 1f
+        offsetX = 0f
+        offsetY = 0f
+    }
+
+    fun closePdfResources() {
+
+        bitmap?.recycle()
+        bitmap = null
+
+        renderer?.close()
+        renderer = null
+
+        descriptor?.close()
+        descriptor = null
+
+        temporaryFile?.delete()
+        temporaryFile = null
+
+        pageCount = 0
+    }
+
+    BackHandler {
+
+        if (showSearch) {
+
+            showSearch = false
+
+        } else {
+
+            closePdfResources()
+
+            (context as? android.app.Activity)
+                ?.finish()
+        }
+    }
+
     LaunchedEffect(uri) {
 
-        loading =
-            true
+        loading = true
+        error = null
 
-        error =
-            null
+        closePdfResources()
 
         try {
 
@@ -132,53 +168,73 @@ fun PdfReaderView(
                             context.cacheDir
                         )
 
-                    context
-                        .contentResolver
-                        .openInputStream(uri)
-                        ?.use { input ->
+                    try {
 
-                            target
-                                .outputStream()
-                                .use { output ->
+                        context
+                            .contentResolver
+                            .openInputStream(uri)
+                            ?.use { input ->
 
-                                    input.copyTo(
-                                        output,
-                                        64 * 1024
-                                    )
-                                }
-                        }
-                        ?: throw IllegalArgumentException(
-                            "Unable to open PDF."
-                        )
+                                target
+                                    .outputStream()
+                                    .use { output ->
 
-                    target
+                                        input.copyTo(
+                                            output,
+                                            bufferSize = 64 * 1024
+                                        )
+                                    }
+                            }
+                            ?: throw IllegalArgumentException(
+                                "Unable to open PDF."
+                            )
+
+                        target
+
+                    } catch (
+                        exception: Exception
+                    ) {
+
+                        target.delete()
+
+                        throw exception
+                    }
                 }
 
-            temporaryFile =
-                file
+            temporaryFile = file
 
             val fd =
-                ParcelFileDescriptor
-                    .open(
-                        file,
-                        ParcelFileDescriptor.MODE_READ_ONLY
-                    )
+                ParcelFileDescriptor.open(
+                    file,
+                    ParcelFileDescriptor.MODE_READ_ONLY
+                )
 
-            descriptor =
-                fd
+            descriptor = fd
 
             val pdf =
                 PdfRenderer(fd)
 
-            renderer =
-                pdf
+            renderer = pdf
 
             pageCount =
                 pdf.pageCount
 
+            if (pageCount <= 0) {
+
+                throw IllegalArgumentException(
+                    "The PDF contains no readable pages."
+                )
+            }
+
+            currentPage = 0
+
+            resetZoom()
+
         } catch (
             exception: Exception
         ) {
+
+            closePdfResources()
 
             error =
                 exception.message
@@ -186,8 +242,7 @@ fun PdfReaderView(
 
         } finally {
 
-            loading =
-                false
+            loading = false
         }
     }
 
@@ -207,73 +262,93 @@ fun PdfReaderView(
             return@LaunchedEffect
         }
 
-        loading =
-            true
+        loading = true
 
-        bitmap =
-            withContext(
-                Dispatchers.IO
-            ) {
+        try {
 
-                val page =
-                    pdf.openPage(
-                        currentPage
-                    )
+            val renderedBitmap =
+                withContext(
+                    Dispatchers.IO
+                ) {
 
-                try {
-
-                    val width =
-                        (
-                            page.width *
-                                2f
-                        ).toInt()
-
-                    val height =
-                        (
-                            page.height *
-                                2f
-                        ).toInt()
-
-                    Bitmap.createBitmap(
-                        width,
-                        height,
-                        Bitmap.Config.ARGB_8888
-                    ).also { result ->
-
-                        page.render(
-                            result,
-                            null,
-                            null,
-                            PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
+                    val page =
+                        pdf.openPage(
+                            currentPage
                         )
+
+                    try {
+
+                        val width =
+                            (
+                                page.width * 2f
+                            ).toInt()
+
+                        val height =
+                            (
+                                page.height * 2f
+                            ).toInt()
+
+                        Bitmap.createBitmap(
+                            width,
+                            height,
+                            Bitmap.Config.ARGB_8888
+                        ).also { result ->
+
+                            page.render(
+                                result,
+                                null,
+                                null,
+                                PdfRenderer.Page
+                                    .RENDER_MODE_FOR_DISPLAY
+                            )
+                        }
+
+                    } finally {
+
+                        page.close()
                     }
-
-                } finally {
-
-                    page.close()
                 }
-            }
 
-        zoom =
-            1f
+            bitmap?.recycle()
 
-        offsetX =
-            0f
+            bitmap =
+                renderedBitmap
 
-        offsetY =
-            0f
+            resetZoom()
 
-        loading =
-            false
+        } catch (
+            exception: Exception
+        ) {
+
+            error =
+                exception.message
+                    ?: "Unable to render PDF page."
+
+        } finally {
+
+            loading = false
+        }
     }
 
-    androidx.compose.runtime.DisposableEffect(Unit) {
+    DisposableEffect(uri) {
 
         onDispose {
 
+            bitmap?.recycle()
+
+            bitmap = null
+
             renderer?.close()
+
+            renderer = null
+
             descriptor?.close()
+
+            descriptor = null
+
             temporaryFile?.delete()
+
+            temporaryFile = null
         }
     }
 
@@ -297,7 +372,16 @@ fun PdfReaderView(
                 zoom =
                     zoom,
 
+                onBack = {
+
+                    closePdfResources()
+
+                    (context as? android.app.Activity)
+                        ?.finish()
+                },
+
                 onSearch = {
+
                     showSearch = true
                 },
 
@@ -321,14 +405,10 @@ fun PdfReaderView(
                         )
 
                     if (
-                        zoom == 1f
+                        zoom <= 1f
                     ) {
 
-                        offsetX =
-                            0f
-
-                        offsetY =
-                            0f
+                        resetZoom()
                     }
                 }
             )
@@ -376,7 +456,7 @@ fun PdfReaderView(
                                 Modifier
                                     .fillMaxSize()
                                     .pointerInput(
-                                        zoom
+                                        currentPage
                                     ) {
 
                                         detectTransformGestures {
@@ -385,7 +465,7 @@ fun PdfReaderView(
                                                 scale,
                                                 _ ->
 
-                                            zoom =
+                                            val newZoom =
                                                 (
                                                     zoom *
                                                         scale
@@ -395,28 +475,30 @@ fun PdfReaderView(
                                                 )
 
                                             if (
-                                                zoom > 1f
+                                                newZoom <= 1f
                                             ) {
+
+                                                zoom = 1f
+
+                                                offsetX = 0f
+                                                offsetY = 0f
+
+                                            } else {
+
+                                                zoom =
+                                                    newZoom
 
                                                 offsetX +=
                                                     pan.x
 
                                                 offsetY +=
                                                     pan.y
-
-                                            } else {
-
-                                                offsetX =
-                                                    0f
-
-                                                offsetY =
-                                                    0f
                                             }
                                         }
-                                    }
-                                    .verticalScroll(
-                                        rememberScrollState()
-                                    )
+                                    },
+
+                            contentAlignment =
+                                Alignment.Center
                         ) {
 
                             Image(
@@ -425,15 +507,16 @@ fun PdfReaderView(
                                         .asImageBitmap(),
 
                                 contentDescription =
-                                    "PDF page ${currentPage + 1}",
+                                    "PDF page ${
+                                        currentPage + 1
+                                    }",
 
                                 contentScale =
                                     ContentScale.Fit,
 
                                 modifier =
                                     Modifier
-                                        .fillMaxWidth()
-                                        .wrapContentHeight()
+                                        .fillMaxSize()
                                         .graphicsLayer {
 
                                             scaleX =
@@ -468,6 +551,8 @@ fun PdfReaderView(
                     ) {
 
                         currentPage--
+
+                        resetZoom()
                     }
                 },
 
@@ -479,6 +564,8 @@ fun PdfReaderView(
                     ) {
 
                         currentPage++
+
+                        resetZoom()
                     }
                 }
             )
@@ -491,6 +578,7 @@ fun PdfReaderView(
 
         Dialog(
             onDismissRequest = {
+
                 showSearch = false
             }
         ) {
@@ -511,14 +599,23 @@ fun PdfReaderView(
                     uri = uri,
 
                     onClose = {
+
                         showSearch = false
                     },
 
                     onResultSelected = {
                         page ->
 
-                        currentPage =
-                            page
+                        if (
+                            page in
+                            0 until pageCount
+                        ) {
+
+                            currentPage =
+                                page
+
+                            resetZoom()
+                        }
 
                         showSearch =
                             false
@@ -534,6 +631,7 @@ private fun PdfToolbar(
     currentPage: Int,
     pageCount: Int,
     zoom: Float,
+    onBack: () -> Unit,
     onSearch: () -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit
@@ -544,16 +642,27 @@ private fun PdfToolbar(
             Modifier
                 .fillMaxWidth()
                 .padding(
-                    horizontal = 8.dp,
+                    horizontal = 4.dp,
                     vertical = 4.dp
                 ),
 
         verticalAlignment =
-            Alignment.CenterVertically,
-
-        horizontalArrangement =
-            Arrangement.SpaceBetween
+            Alignment.CenterVertically
     ) {
+
+        IconButton(
+            onClick =
+                onBack
+        ) {
+
+            Icon(
+                imageVector =
+                    Icons.Default.ArrowBack,
+
+                contentDescription =
+                    "Close PDF"
+            )
+        }
 
         Text(
             text =
@@ -566,62 +675,62 @@ private fun PdfToolbar(
             style =
                 MaterialTheme
                     .typography
-                    .titleMedium
+                    .titleMedium,
+
+            modifier =
+                Modifier.weight(1f)
         )
 
-        Row {
+        IconButton(
+            onClick =
+                onSearch
+        ) {
 
-            IconButton(
-                onClick =
-                    onSearch
-            ) {
+            Icon(
+                imageVector =
+                    Icons.Default.Search,
 
-                Icon(
-                    imageVector =
-                        Icons.Default.Search,
-
-                    contentDescription =
-                        "Search PDF"
-                )
-            }
-
-            IconButton(
-                onClick =
-                    onZoomOut
-            ) {
-
-                Icon(
-                    imageVector =
-                        Icons.Default.ZoomOut,
-
-                    contentDescription =
-                        "Zoom out"
-                )
-            }
-
-            Text(
-                text =
-                    "${(zoom * 100).toInt()}%",
-
-                modifier =
-                    Modifier.padding(
-                        horizontal = 4.dp
-                    )
+                contentDescription =
+                    "Search PDF"
             )
+        }
 
-            IconButton(
-                onClick =
-                    onZoomIn
-            ) {
+        IconButton(
+            onClick =
+                onZoomOut
+        ) {
 
-                Icon(
-                    imageVector =
-                        Icons.Default.ZoomIn,
+            Icon(
+                imageVector =
+                    Icons.Default.ZoomOut,
 
-                    contentDescription =
-                        "Zoom in"
+                contentDescription =
+                    "Zoom out"
+            )
+        }
+
+        Text(
+            text =
+                "${(zoom * 100).toInt()}%",
+
+            modifier =
+                Modifier.padding(
+                    horizontal = 2.dp
                 )
-            }
+        )
+
+        IconButton(
+            onClick =
+                onZoomIn
+        ) {
+
+            Icon(
+                imageVector =
+                    Icons.Default.ZoomIn,
+
+                contentDescription =
+                    "Zoom in"
+            )
         }
     }
 }
@@ -656,7 +765,8 @@ private fun PdfNavigationBar(
         ) {
 
             Text(
-                text = "Previous"
+                text =
+                    "Previous"
             )
         }
 
@@ -679,7 +789,8 @@ private fun PdfNavigationBar(
         ) {
 
             Text(
-                text = "Next"
+                text =
+                    "Next"
             )
         }
     }
