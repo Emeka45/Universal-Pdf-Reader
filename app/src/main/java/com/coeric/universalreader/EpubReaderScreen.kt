@@ -50,11 +50,7 @@ import java.util.UUID
 @Composable
 fun EpubReaderScreen(
     uri: Uri,
-    onBack: () -> Unit = {
-        (androidx.compose.ui.platform.LocalContext.current
-            as? android.app.Activity)
-            ?.finish()
-    }
+    onBack: () -> Unit = {}
 ) {
 
     val context =
