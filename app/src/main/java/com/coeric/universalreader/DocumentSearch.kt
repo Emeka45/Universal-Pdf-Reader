@@ -2,64 +2,112 @@ package com.coeric.universalreader
 
 object DocumentSearch {
 
-    fun searchEpub(
+    fun search(
         document: EpubDocument,
-        query: String
+        query: String,
+        maxResults: Int = 100
     ): List<SearchResult> {
 
-        if (query.isBlank()) {
+        val normalizedQuery =
+            query.trim().lowercase()
+
+        if (
+            normalizedQuery.isBlank()
+        ) {
             return emptyList()
         }
-
-        val searchQuery =
-            query.trim()
 
         val results =
             mutableListOf<SearchResult>()
 
-        document.chapters.forEachIndexed { index, chapter ->
+        document.chapters.forEachIndexed {
+                index,
+                chapter ->
 
-            val content =
+            if (
+                results.size >= maxResults
+            ) {
+                return@forEachIndexed
+            }
+
+            val text =
                 chapter.content
 
-            val lowerContent =
-                content.lowercase()
+            val normalizedText =
+                text.lowercase()
 
-            val lowerQuery =
-                searchQuery.lowercase()
+            var searchPosition = 0
 
-            var position =
-                lowerContent.indexOf(
-                    lowerQuery
-                )
+            while (
+                searchPosition <
+                    normalizedText.length
+            ) {
 
-            while (position >= 0) {
+                if (
+                    results.size >= maxResults
+                ) {
+                    break
+                }
+
+                val matchIndex =
+                    normalizedText.indexOf(
+                        normalizedQuery,
+                        searchPosition
+                    )
+
+                if (
+                    matchIndex < 0
+                ) {
+                    break
+                }
 
                 val start =
-                    (position - 80)
-                        .coerceAtLeast(0)
+                    (
+                        matchIndex - 100
+                    ).coerceAtLeast(0)
 
                 val end =
-                    (position +
-                        searchQuery.length +
-                        120)
-                        .coerceAtMost(
-                            content.length
-                        )
+                    (
+                        matchIndex +
+                            normalizedQuery.length +
+                            160
+                    ).coerceAtMost(
+                        text.length
+                    )
+
+                val prefix =
+                    if (
+                        start > 0
+                    ) {
+                        "…"
+                    } else {
+                        ""
+                    }
+
+                val suffix =
+                    if (
+                        end < text.length
+                    ) {
+                        "…"
+                    } else {
+                        ""
+                    }
 
                 val snippet =
-                    content
-                        .substring(
-                            start,
-                            end
-                        )
-                        .replace(
-                            Regex(
-                                "\\s+"
-                            ),
-                            " "
-                        )
-                        .trim()
+                    prefix +
+                        text
+                            .substring(
+                                start,
+                                end
+                            )
+                            .replace(
+                                Regex(
+                                    "\\s+"
+                                ),
+                                " "
+                            )
+                            .trim() +
+                        suffix
 
                 results.add(
                     SearchResult(
@@ -72,18 +120,9 @@ object DocumentSearch {
                     )
                 )
 
-                if (
-                    results.size >= 100
-                ) {
-                    return results
-                }
-
-                position =
-                    lowerContent.indexOf(
-                        lowerQuery,
-                        position +
-                            searchQuery.length
-                    )
+                searchPosition =
+                    matchIndex +
+                        normalizedQuery.length
             }
         }
 
