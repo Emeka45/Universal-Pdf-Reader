@@ -75,17 +75,18 @@ dependencies {
     )
 
     /*
-     * Fragment support for hosting
-     * Readium's navigator inside Compose.
+     * Fragment support.
      */
+    implementation(
+        "androidx.fragment:fragment-ktx:1.8.9"
+    )
+
     implementation(
         "androidx.fragment:fragment-compose:1.8.9"
     )
 
     /*
      * READIUM KOTLIN TOOLKIT 3.1.0
-     *
-     * Professional EPUB engine.
      */
     implementation(
         "org.readium.kotlin-toolkit:readium-shared:3.1.0"
@@ -100,8 +101,7 @@ dependencies {
     )
 
     /*
-     * Required by Readium for
-     * Java API desugaring.
+     * Required by Readium.
      */
     coreLibraryDesugaring(
         "com.android.tools:desugar_jdk_libs:2.1.5"
