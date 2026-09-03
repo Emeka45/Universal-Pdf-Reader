@@ -46,12 +46,6 @@ dependencies {
         "androidx.activity:activity-compose:1.10.1"
     )
 
-    /*
-     * Compose BOM
-     *
-     * 2025.08.00 is compatible with
-     * compileSdk 36 / AGP 8.13.0.
-     */
     implementation(
         platform(
             "androidx.compose:compose-bom:2025.08.00"
@@ -79,21 +73,38 @@ dependencies {
     )
 
     /*
-     * CBR / RAR support
+     * READIUM KOTLIN TOOLKIT
+     *
+     * Professional publication engine.
+     */
+    implementation(
+        "org.readium.kotlin-toolkit:readium-shared:3.1.0"
+    )
+
+    implementation(
+        "org.readium.kotlin-toolkit:readium-streamer:3.1.0"
+    )
+
+    implementation(
+        "org.readium.kotlin-toolkit:readium-navigator:3.1.0"
+    )
+
+    /*
+     * Existing CBR support.
      */
     implementation(
         "com.github.junrar:junrar:8.1.0"
     )
 
     /*
-     * PDF text extraction and search
+     * Existing PDF search support.
      */
     implementation(
         "com.tom-roush:pdfbox-android:2.0.27.0"
     )
 
     /*
-     * Compose tooling for debug builds
+     * Compose tooling.
      */
     debugImplementation(
         "androidx.compose.ui:ui-tooling"
