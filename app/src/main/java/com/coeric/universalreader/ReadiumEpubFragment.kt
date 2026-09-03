@@ -1,61 +1,27 @@
 package com.coeric.universalreader
 
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubDefaults
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
-import org.readium.r2.shared.publication.Publication
 
 class ReadiumEpubFragment : Fragment(),
     EpubNavigatorFragment.Listener {
 
-    private var publication: Publication? = null
-
-    private val navigatorContainerId =
-        View.generateViewId()
-
-    fun setPublication(
-        publication: Publication
-    ) {
-        this.publication = publication
-    }
+    private var navigatorContainerId: Int = 0
 
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
-
-        val currentPublication =
-            publication
-
-        if (currentPublication != null) {
-
-            val navigatorFactory =
-                EpubNavigatorFactory(
-                    publication = currentPublication,
-                    configuration =
-                        EpubNavigatorFactory.Configuration(
-                            defaults =
-                                EpubDefaults(
-                                    scroll = true
-                                )
-                        )
-                )
-
-            childFragmentManager.fragmentFactory =
-                navigatorFactory.createFragmentFactory(
-                    initialLocator = null,
-                    listener = this
-                )
-        }
-
-        super.onCreate(
-            savedInstanceState
-        )
+        super.onCreate(savedInstanceState)
     }
 
     override fun onCreateView(
@@ -64,12 +30,14 @@ class ReadiumEpubFragment : Fragment(),
         savedInstanceState: Bundle?
     ): View {
 
+        navigatorContainerId =
+            View.generateViewId()
+
         return FrameLayout(
             requireContext()
         ).apply {
 
-            id =
-                navigatorContainerId
+            id = navigatorContainerId
 
             layoutParams =
                 ViewGroup.LayoutParams(
@@ -89,26 +57,102 @@ class ReadiumEpubFragment : Fragment(),
             savedInstanceState
         )
 
-        if (publication == null) {
-            return
-        }
-
         if (
             childFragmentManager
                 .findFragmentByTag(
                     "readium_epub_navigator"
-                ) == null
+                ) != null
         ) {
+            return
+        }
 
-            childFragmentManager
-                .beginTransaction()
-                .replace(
-                    navigatorContainerId,
-                    EpubNavigatorFragment::class.java,
-                    Bundle(),
-                    "readium_epub_navigator"
+        val uriString =
+            arguments
+                ?.getString(ARG_URI)
+
+        if (uriString.isNullOrBlank()) {
+            return
+        }
+
+        val uri =
+            Uri.parse(uriString)
+
+        lifecycleScope.launch {
+
+            val result =
+                ReadiumEpubRepository.open(
+                    context = requireContext(),
+                    uri = uri
                 )
-                .commitNow()
+
+            result
+                .onSuccess { publication ->
+
+                    if (!isAdded) {
+                        return@onSuccess
+                    }
+
+                    val navigatorFactory =
+                        EpubNavigatorFactory(
+                            publication = publication,
+                            configuration =
+                                EpubNavigatorFactory.Configuration(
+                                    defaults =
+                                        EpubDefaults(
+                                            scroll = true
+                                        )
+                                )
+                        )
+
+                    childFragmentManager
+                        .fragmentFactory =
+                        navigatorFactory
+                            .createFragmentFactory(
+                                initialLocator = null,
+                                listener = this@ReadiumEpubFragment
+                            )
+
+                    if (
+                        childFragmentManager
+                            .findFragmentByTag(
+                                "readium_epub_navigator"
+                            ) == null
+                    ) {
+
+                        childFragmentManager
+                            .beginTransaction()
+                            .replace(
+                                navigatorContainerId,
+                                EpubNavigatorFragment::class.java,
+                                Bundle(),
+                                "readium_epub_navigator"
+                            )
+                            .commitNow()
+                    }
+                }
+        }
+    }
+
+    companion object {
+
+        private const val ARG_URI =
+            "readium_epub_uri"
+
+        fun newInstance(
+            uri: Uri
+        ): ReadiumEpubFragment {
+
+            return ReadiumEpubFragment().apply {
+
+                arguments =
+                    Bundle().apply {
+
+                        putString(
+                            ARG_URI,
+                            uri.toString()
+                        )
+                    }
+            }
         }
     }
 }
