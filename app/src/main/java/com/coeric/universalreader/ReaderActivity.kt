@@ -2,7 +2,6 @@ package com.coeric.universalreader
 
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,8 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 
-class ReaderActivity : ComponentActivity() {
+class ReaderActivity : FragmentActivity() {
 
     override fun onCreate(
         savedInstanceState: Bundle?
@@ -109,12 +109,8 @@ private fun ReaderContent(
 
         format == DocumentFormat.EPUB -> {
 
-            EpubReaderScreen(
-                uri = uri,
-                onBack = {
-                    (context as? ComponentActivity)
-                        ?.finish()
-                }
+            ReadiumEpubContent(
+                uri = uri
             )
         }
 
@@ -143,6 +139,94 @@ private fun ReaderContent(
 
             RoutedDocumentContent(
                 uri = uri
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReadiumEpubContent(
+    uri: Uri
+) {
+
+    val context =
+        LocalContext.current
+
+    val activity =
+        context as? FragmentActivity
+
+    var publication by remember {
+        mutableStateOf<
+            org.readium.r2.shared.publication.Publication?
+        >(null)
+    }
+
+    var error by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    LaunchedEffect(uri) {
+
+        try {
+
+            val result =
+                ReadiumEpubRepository.open(
+                    context = context,
+                    uri = uri
+                )
+
+            result
+                .onSuccess {
+                    publication = it
+                }
+                .onFailure {
+
+                    error =
+                        it.message
+                            ?: "Unable to open EPUB with Readium."
+                }
+
+        } catch (
+            exception: Exception
+        ) {
+
+            error =
+                exception.message
+                    ?: "Unable to open EPUB."
+        }
+    }
+
+    when {
+
+        error != null -> {
+
+            ErrorScreen(
+                message =
+                    error
+                        ?: "Unable to open EPUB."
+            )
+        }
+
+        publication == null -> {
+
+            LoadingScreen()
+        }
+
+        activity == null -> {
+
+            ErrorScreen(
+                message =
+                    "Unable to initialize the EPUB reader."
+            )
+        }
+
+        else -> {
+
+            ReadiumEpubScreen(
+                publication = publication!!,
+                activity = activity,
+                modifier =
+                    Modifier.fillMaxSize()
             )
         }
     }
