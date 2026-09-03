@@ -20,8 +20,7 @@ object HighlightRepository {
 
         return getAllHighlights(context)
             .filter {
-                it.documentUri ==
-                    documentUri
+                it.documentUri == documentUri
             }
             .sortedByDescending {
                 it.createdAt
@@ -43,16 +42,19 @@ object HighlightRepository {
         val highlight =
             Highlight(
                 id =
-                    UUID.randomUUID()
-                        .toString(),
+                    UUID.randomUUID().toString(),
+
                 documentUri =
                     documentUri,
+
                 chapterIndex =
                     chapterIndex,
+
                 selectedText =
-                    selectedText,
+                    selectedText.trim(),
+
                 note =
-                    note
+                    note.trim()
             )
 
         highlights.add(
@@ -89,13 +91,15 @@ object HighlightRepository {
     ): List<Highlight> {
 
         val json =
-            context.getSharedPreferences(
-                PREFS,
-                Context.MODE_PRIVATE
-            ).getString(
-                HIGHLIGHTS,
-                null
-            )
+            context
+                .getSharedPreferences(
+                    PREFS,
+                    Context.MODE_PRIVATE
+                )
+                .getString(
+                    HIGHLIGHTS,
+                    null
+                )
                 ?: return emptyList()
 
         return try {
@@ -103,47 +107,70 @@ object HighlightRepository {
             val array =
                 JSONArray(json)
 
-            val result =
-                mutableListOf<Highlight>()
+            buildList {
 
-            for (
-                index in 0 until array.length()
-            ) {
+                for (
+                    index in 0 until array.length()
+                ) {
 
-                val item =
-                    array.getJSONObject(index)
+                    val item =
+                        array.optJSONObject(index)
+                            ?: continue
 
-                result.add(
-                    Highlight(
-                        id =
-                            item.optString(
-                                "id"
-                            ),
-                        documentUri =
-                            item.optString(
-                                "documentUri"
-                            ),
-                        chapterIndex =
-                            item.optInt(
-                                "chapterIndex"
-                            ),
-                        selectedText =
-                            item.optString(
-                                "selectedText"
-                            ),
-                        note =
-                            item.optString(
-                                "note"
-                            ),
-                        createdAt =
-                            item.optLong(
-                                "createdAt"
-                            )
+                    val id =
+                        item.optString(
+                            "id"
+                        )
+
+                    val documentUri =
+                        item.optString(
+                            "documentUri"
+                        )
+
+                    val selectedText =
+                        item.optString(
+                            "selectedText"
+                        )
+
+                    if (
+                        id.isBlank() ||
+                        documentUri.isBlank() ||
+                        selectedText.isBlank()
+                    ) {
+                        continue
+                    }
+
+                    add(
+                        Highlight(
+                            id = id,
+
+                            documentUri =
+                                documentUri,
+
+                            chapterIndex =
+                                item.optInt(
+                                    "chapterIndex",
+                                    0
+                                ),
+
+                            selectedText =
+                                selectedText,
+
+                            note =
+                                item.optString(
+                                    "note",
+                                    ""
+                                ),
+
+                            createdAt =
+                                item.optLong(
+                                    "createdAt",
+                                    System.currentTimeMillis()
+                                )
+                        )
                     )
-                )
+                }
             }
-
-            result
 
         } catch (
             exception: Exception
@@ -161,50 +188,49 @@ object HighlightRepository {
         val array =
             JSONArray()
 
-        for (
-            highlight in highlights
-        ) {
+        highlights.forEach { highlight ->
 
-            val item =
-                JSONObject()
+            array.put(
+                JSONObject().apply {
 
-            item.put(
-                "id",
-                highlight.id
+                    put(
+                        "id",
+                        highlight.id
+                    )
+
+                    put(
+                        "documentUri",
+                        highlight.documentUri
+                    )
+
+                    put(
+                        "chapterIndex",
+                        highlight.chapterIndex
+                    )
+
+                    put(
+                        "selectedText",
+                        highlight.selectedText
+                    )
+
+                    put(
+                        "note",
+                        highlight.note
+                    )
+
+                    put(
+                        "createdAt",
+                        highlight.createdAt
+                    )
+                }
             )
-
-            item.put(
-                "documentUri",
-                highlight.documentUri
-            )
-
-            item.put(
-                "chapterIndex",
-                highlight.chapterIndex
-            )
-
-            item.put(
-                "selectedText",
-                highlight.selectedText
-            )
-
-            item.put(
-                "note",
-                highlight.note
-            )
-
-            item.put(
-                "createdAt",
-                highlight.createdAt
-            )
-
-            array.put(item)
         }
 
-        context.getSharedPreferences(
-            PREFS,
-            Context.MODE_PRIVATE
-        )
+        context
+            .getSharedPreferences(
+                PREFS,
+                Context.MODE_PRIVATE
+            )
             .edit()
             .putString(
                 HIGHLIGHTS,
