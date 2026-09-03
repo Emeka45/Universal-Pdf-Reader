@@ -3,13 +3,10 @@ package com.coeric.universalreader
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,160 +19,106 @@ fun ReaderSettingsPanel(
     onSettingsChanged: (ReaderSettings) -> Unit
 ) {
 
-    Card(
+    Column(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(
-                    horizontal = 16.dp,
-                    vertical = 8.dp
-                )
+                .padding(16.dp),
+        verticalArrangement =
+            Arrangement.spacedBy(16.dp)
     ) {
 
-        Column(
-            modifier =
-                Modifier.padding(
-                    16.dp
+        Text(
+            text =
+                "Font size: ${
+                    settings.fontSize.toInt()
+                }sp"
+        )
+
+        Slider(
+            value =
+                settings.fontSize,
+            onValueChange = {
+                onSettingsChanged(
+                    settings.copy(
+                        fontSize = it
+                    )
                 )
+            },
+            valueRange =
+                12f..32f
+        )
+
+        Text(
+            text =
+                "Line spacing: ${
+                    String.format(
+                        "%.2f",
+                        settings.lineSpacing
+                    )
+                }"
+        )
+
+        Slider(
+            value =
+                settings.lineSpacing,
+            onValueChange = {
+                onSettingsChanged(
+                    settings.copy(
+                        lineSpacing = it
+                    )
+                )
+            },
+            valueRange =
+                1.0f..2.5f
+        )
+
+        Text("Theme")
+
+        Row(
+            modifier =
+                Modifier.fillMaxWidth(),
+            horizontalArrangement =
+                Arrangement.spacedBy(8.dp)
         ) {
 
-            Text(
-                text = "Reader Settings"
-            )
+            ReaderTheme.values().forEach {
+                theme ->
 
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        12.dp
-                    )
-            )
+                FilterChip(
+                    selected =
+                        settings.theme == theme,
+                    onClick = {
 
-            Text(
-                text =
-                    "Font size: ${
-                        settings.fontSize.toInt()
-                    }sp"
-            )
-
-            Slider(
-                value =
-                    settings.fontSize,
-                onValueChange = { value ->
-
-                    onSettingsChanged(
-                        settings.copy(
-                            fontSize = value
+                        onSettingsChanged(
+                            settings.copy(
+                                theme = theme
+                            )
                         )
-                    )
-                },
-                valueRange =
-                    12f..36f
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        8.dp
-                    )
-            )
-
-            Text(
-                text =
-                    "Line spacing: ${
-                        String.format(
-                            "%.2f",
-                            settings.lineSpacing
+                    },
+                    label = {
+                        Text(
+                            theme.name
+                                .lowercase()
+                                .replaceFirstChar {
+                                    it.uppercase()
+                                }
                         )
-                    }"
-            )
+                    }
+                )
+            }
+        }
 
-            Slider(
-                value =
-                    settings.lineSpacing,
-                onValueChange = { value ->
+        Text("Text alignment")
 
-                    onSettingsChanged(
-                        settings.copy(
-                            lineSpacing = value
-                        )
-                    )
-                },
-                valueRange =
-                    1.0f..2.5f
-            )
+        Row(
+            modifier =
+                Modifier.fillMaxWidth(),
+            horizontalArrangement =
+                Arrangement.spacedBy(8.dp)
+        ) {
 
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        12.dp
-                    )
-            )
-
-            Text(
-                text = "Theme"
-            )
-
-            ThemeOption(
-                text = "Light",
-                selected =
-                    settings.theme ==
-                        ReaderTheme.LIGHT,
-                onClick = {
-
-                    onSettingsChanged(
-                        settings.copy(
-                            theme =
-                                ReaderTheme.LIGHT
-                        )
-                    )
-                }
-            )
-
-            ThemeOption(
-                text = "Dark",
-                selected =
-                    settings.theme ==
-                        ReaderTheme.DARK,
-                onClick = {
-
-                    onSettingsChanged(
-                        settings.copy(
-                            theme =
-                                ReaderTheme.DARK
-                        )
-                    )
-                }
-            )
-
-            ThemeOption(
-                text = "Sepia",
-                selected =
-                    settings.theme ==
-                        ReaderTheme.SEPIA,
-                onClick = {
-
-                    onSettingsChanged(
-                        settings.copy(
-                            theme =
-                                ReaderTheme.SEPIA
-                        )
-                    )
-                }
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        12.dp
-                    )
-            )
-
-            Text(
-                text = "Text alignment"
-            )
-
-            ThemeOption(
-                text = "Left",
+            FilterChip(
                 selected =
                     settings.textAlignment ==
                         ReaderTextAlignment.LEFT,
@@ -187,11 +130,13 @@ fun ReaderSettingsPanel(
                                 ReaderTextAlignment.LEFT
                         )
                     )
+                },
+                label = {
+                    Text("Left")
                 }
             )
 
-            ThemeOption(
-                text = "Justified",
+            FilterChip(
                 selected =
                     settings.textAlignment ==
                         ReaderTextAlignment.JUSTIFY,
@@ -203,67 +148,21 @@ fun ReaderSettingsPanel(
                                 ReaderTextAlignment.JUSTIFY
                         )
                     )
+                },
+                label = {
+                    Text("Justify")
                 }
             )
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        12.dp
-                    )
-            )
-
-            Row(
-                modifier =
-                    Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.End
-            ) {
-
-                Button(
-                    onClick = {
-
-                        onSettingsChanged(
-                            ReaderSettings()
-                        )
-                    }
-                ) {
-
-                    Text(
-                        "Reset"
-                    )
-                }
-            }
         }
-    }
-}
 
-@Composable
-private fun ThemeOption(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-
-    Row(
-        modifier =
-            Modifier.fillMaxWidth()
-    ) {
-
-        RadioButton(
-            selected =
-                selected,
-            onClick =
-                onClick
-        )
-
-        Text(
-            text =
-                text,
-            modifier =
-                Modifier.padding(
-                    top = 12.dp
+        Button(
+            onClick = {
+                onSettingsChanged(
+                    ReaderSettings()
                 )
-        )
+            }
+        ) {
+            Text("Reset")
+        }
     }
 }
