@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -15,10 +16,12 @@ import androidx.compose.ui.unit.dp
 fun ReaderSettingsPanel(
     settings: ReaderSettings,
     onSettingsChanged:
-        (ReaderSettings) -> Unit
+        (ReaderSettings) -> Unit,
+    modifier: Modifier = Modifier
 ) {
 
     Column(
+        modifier = modifier,
         verticalArrangement =
             Arrangement.spacedBy(12.dp)
     ) {
@@ -32,6 +35,7 @@ fun ReaderSettingsPanel(
         Slider(
             value =
                 settings.fontSize,
+
             onValueChange = {
                 onSettingsChanged(
                     settings.copy(
@@ -39,6 +43,7 @@ fun ReaderSettingsPanel(
                     )
                 )
             },
+
             valueRange =
                 12f..32f
         )
@@ -55,6 +60,7 @@ fun ReaderSettingsPanel(
         Slider(
             value =
                 settings.lineSpacing,
+
             onValueChange = {
                 onSettingsChanged(
                     settings.copy(
@@ -62,6 +68,7 @@ fun ReaderSettingsPanel(
                     )
                 )
             },
+
             valueRange =
                 1f..2.5f
         )
@@ -71,6 +78,7 @@ fun ReaderSettingsPanel(
         Row(
             modifier =
                 Modifier.fillMaxWidth(),
+
             horizontalArrangement =
                 Arrangement.spacedBy(8.dp)
         ) {
@@ -81,6 +89,7 @@ fun ReaderSettingsPanel(
                 FilterChip(
                     selected =
                         settings.theme == theme,
+
                     onClick = {
 
                         onSettingsChanged(
@@ -89,7 +98,9 @@ fun ReaderSettingsPanel(
                             )
                         )
                     },
+
                     label = {
+
                         Text(
                             theme.name
                                 .lowercase()
@@ -107,6 +118,7 @@ fun ReaderSettingsPanel(
         Row(
             modifier =
                 Modifier.fillMaxWidth(),
+
             horizontalArrangement =
                 Arrangement.spacedBy(8.dp)
         ) {
@@ -115,6 +127,7 @@ fun ReaderSettingsPanel(
                 selected =
                     settings.textAlignment ==
                         ReaderTextAlignment.LEFT,
+
                 onClick = {
 
                     onSettingsChanged(
@@ -124,6 +137,7 @@ fun ReaderSettingsPanel(
                         )
                     )
                 },
+
                 label = {
                     Text("Left")
                 }
@@ -133,6 +147,7 @@ fun ReaderSettingsPanel(
                 selected =
                     settings.textAlignment ==
                         ReaderTextAlignment.JUSTIFY,
+
                 onClick = {
 
                     onSettingsChanged(
@@ -142,21 +157,23 @@ fun ReaderSettingsPanel(
                         )
                     )
                 },
+
                 label = {
                     Text("Justify")
                 }
             )
         }
 
-        androidx.compose.material3
-            .OutlinedButton(
-                onClick = {
-                    onSettingsChanged(
-                        ReaderSettings()
-                    )
-                }
-            ) {
-                Text("Reset")
+        OutlinedButton(
+            onClick = {
+
+                onSettingsChanged(
+                    ReaderSettings()
+                )
             }
+        ) {
+
+            Text("Reset")
+        }
     }
 }
