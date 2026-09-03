@@ -86,10 +86,11 @@ fun ReaderDocumentScreen(
         mutableStateOf(0)
     }
 
-    var settings by remember {
+    var settings by remember(documentUri) {
         mutableStateOf(
             ReaderSettingsRepository.get(
-                context
+                context,
+                documentUri
             )
         )
     }
@@ -110,28 +111,6 @@ fun ReaderDocumentScreen(
                 documentUri
             )
         )
-    }
-
-    val savedPosition =
-        remember(documentUri) {
-            ReadingPositionRepository.get(
-                context,
-                documentUri
-            )
-        }
-
-    LaunchedEffect(savedPosition) {
-
-        if (savedPosition != null) {
-
-            selectedChapter =
-                savedPosition.chapterIndex.coerceIn(
-                    0,
-                    (
-                        document.chapters.size - 1
-                    ).coerceAtLeast(0)
-                )
-        }
     }
 
     BackHandler {
@@ -448,6 +427,7 @@ fun ReaderDocumentScreen(
 
                             ReaderSettingsRepository.save(
                                 context,
+                                documentUri,
                                 newSettings
                             )
                         },
@@ -1089,14 +1069,18 @@ private fun DocumentContent(
             )
         }
 
+    var restoredPosition by remember(
+        documentUri
+    ) {
+        mutableStateOf(false)
+    }
+
     LaunchedEffect(savedPosition) {
 
         if (savedPosition != null) {
 
             val maxIndex =
-                (
-                    document.chapters.size
-                ).coerceAtLeast(0)
+                document.chapters.size
 
             val scrollIndex =
                 savedPosition.scrollIndex
@@ -1111,11 +1095,18 @@ private fun DocumentContent(
                     .coerceAtLeast(0)
             )
         }
+
+        restoredPosition =
+            true
     }
 
-    LaunchedEffect(selectedChapter) {
+    LaunchedEffect(
+        selectedChapter,
+        restoredPosition
+    ) {
 
         if (
+            restoredPosition &&
             document.chapters.isNotEmpty()
         ) {
 
@@ -1127,9 +1118,14 @@ private fun DocumentContent(
                     document.chapters.size
                 )
 
-            listState.animateScrollToItem(
-                target
-            )
+            if (
+                listState.firstVisibleItemIndex == 0
+            ) {
+
+                listState.scrollToItem(
+                    target
+                )
+            }
         }
     }
 
