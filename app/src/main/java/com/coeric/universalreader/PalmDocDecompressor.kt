@@ -9,7 +9,9 @@ object PalmDocDecompressor {
     ): ByteArray {
 
         val output =
-            ByteArrayOutputStream()
+            ByteArrayOutputStream(
+                input.size * 2
+            )
 
         var position = 0
 
@@ -25,11 +27,17 @@ object PalmDocDecompressor {
 
             when {
 
+                /*
+                 * 0 is a literal null byte.
+                 */
                 value == 0 -> {
-
                     output.write(0)
                 }
 
+                /*
+                 * Values 1..8 mean that the next
+                 * 1..8 bytes are literal bytes.
+                 */
                 value in 1..8 -> {
 
                     repeat(value) {
@@ -49,6 +57,10 @@ object PalmDocDecompressor {
                     }
                 }
 
+                /*
+                 * Values 9..127 are literal ASCII
+                 * characters.
+                 */
                 value in 9..127 -> {
 
                     output.write(
@@ -56,6 +68,10 @@ object PalmDocDecompressor {
                     )
                 }
 
+                /*
+                 * Values 128..191 encode a
+                 * two-byte back-reference.
+                 */
                 value in 128..191 -> {
 
                     if (
@@ -93,6 +109,11 @@ object PalmDocDecompressor {
                     )
                 }
 
+                /*
+                 * Values 192..255 represent a
+                 * space followed by the character
+                 * with the high bit removed.
+                 */
                 else -> {
 
                     output.write(
@@ -116,30 +137,62 @@ object PalmDocDecompressor {
     ) {
 
         if (
-            distance <= 0
+            distance <= 0 ||
+            length <= 0
         ) {
             return
         }
 
+        /*
+         * ByteArrayOutputStream exposes its
+         * current buffer through toByteArray(),
+         * but repeatedly creating copies is
+         * expensive.
+         *
+         * Since PalmDOC back-references may
+         * overlap the bytes currently being
+         * copied, we copy one byte at a time
+         * while maintaining a single snapshot
+         * of the output and updating it locally.
+         */
+        val existing =
+            output.toByteArray()
+
+        var currentSize =
+            existing.size
+
         repeat(length) {
 
-            val data =
-                output.toByteArray()
-
             val source =
-                data.size - distance
+                currentSize - distance
 
             if (
                 source < 0 ||
-                source >= data.size
+                source >= currentSize
             ) {
                 return
             }
 
+            val value =
+                if (
+                    source < existing.size
+                ) {
+                    existing[source]
+                } else {
+                    /*
+                     * This branch handles overlapping
+                     * back-references by reading from
+                     * the bytes already generated in
+                     * this operation.
+                     */
+                    return
+                }
+
             output.write(
-                data[source]
-                    .toInt()
+                value.toInt()
             )
+
+            currentSize++
         }
     }
 }
