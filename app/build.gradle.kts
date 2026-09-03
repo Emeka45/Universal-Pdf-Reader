@@ -25,6 +25,11 @@ android {
 
         targetCompatibility =
             JavaVersion.VERSION_17
+
+        /*
+         * Required by Readium.
+         */
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -73,9 +78,7 @@ dependencies {
     )
 
     /*
-     * READIUM KOTLIN TOOLKIT
-     *
-     * Professional publication engine.
+     * READIUM KOTLIN TOOLKIT 3.1.0
      */
     implementation(
         "org.readium.kotlin-toolkit:readium-shared:3.1.0"
@@ -90,7 +93,14 @@ dependencies {
     )
 
     /*
-     * Existing CBR support.
+     * Required for Java 8+ API desugaring.
+     */
+    coreLibraryDesugaring(
+        "com.android.tools:desugar_jdk_libs:2.1.5"
+    )
+
+    /*
+     * CBR support.
      */
     implementation(
         "com.github.junrar:junrar:8.1.0"
