@@ -4,52 +4,53 @@ import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
-import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.UUID
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EpubReaderScreen(
     uri: Uri,
-    onBack: () -> Unit = {}
+    onBack: () -> Unit
 ) {
 
     val context =
@@ -62,12 +63,12 @@ fun EpubReaderScreen(
         mutableStateOf<EpubDocument?>(null)
     }
 
-    var loading by remember {
-        mutableStateOf(true)
-    }
-
     var error by remember {
         mutableStateOf<String?>(null)
+    }
+
+    var loading by remember {
+        mutableStateOf(true)
     }
 
     var settings by remember {
@@ -79,11 +80,7 @@ fun EpubReaderScreen(
         )
     }
 
-    var selectedChapter by rememberSaveable {
-        mutableStateOf(0)
-    }
-
-    var showChapters by remember {
+    var showSearch by remember {
         mutableStateOf(false)
     }
 
@@ -95,7 +92,7 @@ fun EpubReaderScreen(
         mutableStateOf(false)
     }
 
-    var showSearch by remember {
+    var showChapters by remember {
         mutableStateOf(false)
     }
 
@@ -103,9 +100,16 @@ fun EpubReaderScreen(
         mutableStateOf(false)
     }
 
-    var bookmarkNote by remember {
+    var searchQuery by remember {
         mutableStateOf("")
     }
+
+    var selectedChapter by remember {
+        mutableStateOf(0)
+    }
+
+    val listState =
+        rememberLazyListState()
 
     LaunchedEffect(uri) {
 
@@ -114,11 +118,17 @@ fun EpubReaderScreen(
 
         try {
 
-            document =
-                EpubReader.open(
-                    context,
-                    uri
-                )
+            val loaded =
+                withContext(
+                    Dispatchers.IO
+                ) {
+                    EpubReader.open(
+                        context,
+                        uri
+                    )
+                }
+
+            document = loaded
 
             val saved =
                 ReadingPositionRepository.get(
@@ -128,78 +138,129 @@ fun EpubReaderScreen(
 
             if (
                 saved != null &&
-                document != null
+                loaded.chapters.isNotEmpty()
             ) {
 
                 selectedChapter =
-                    saved.chapterIndex.coerceIn(
-                        0,
-                        document!!.chapters
-                            .lastIndex
-                            .coerceAtLeast(0)
-                    )
+                    saved.chapterIndex
+                        .coerceIn(
+                            0,
+                            loaded.chapters.lastIndex
+                        )
             }
 
-        } catch (exception: Exception) {
-
-            document = null
+        } catch (
+            exception: Exception
+        ) {
 
             error =
                 exception.message
                     ?: "Unable to open EPUB."
+        }
 
-        } finally {
-            loading = false
+        loading = false
+    }
+
+    LaunchedEffect(
+        selectedChapter,
+        document
+    ) {
+
+        if (
+            document != null &&
+            document!!.chapters.isNotEmpty()
+        ) {
+
+            listState.animateScrollToItem(
+                selectedChapter
+                    .coerceIn(
+                        0,
+                        document!!.chapters.lastIndex
+                    )
+            )
         }
     }
 
-    when {
+    LaunchedEffect(
+        listState.firstVisibleItemIndex
+    ) {
 
-        loading -> {
+        val current =
+            listState.firstVisibleItemIndex
 
-            Box(
-                modifier =
-                    Modifier.fillMaxSize(),
-                contentAlignment =
-                    Alignment.Center
-            ) {
+        if (
+            document != null &&
+            current >= 0 &&
+            current < document!!.chapters.size
+        ) {
 
-                CircularProgressIndicator()
-            }
+            selectedChapter = current
+
+            ReadingPositionRepository.save(
+                context = context,
+                documentUri = uri.toString(),
+                position =
+                    ReadingPosition(
+                        documentUri =
+                            uri.toString(),
+                        chapterIndex =
+                            current,
+                        scrollIndex =
+                            current,
+                        scrollOffset =
+                            listState
+                                .firstVisibleItemScrollOffset
+                    )
+            )
+        }
+    }
+
+    if (loading) {
+
+        Box(
+            modifier =
+                Modifier.fillMaxSize(),
+            contentAlignment =
+                Alignment.Center
+        ) {
+
+            CircularProgressIndicator()
         }
 
-        error != null -> {
+        return
+    }
+
+    if (error != null) {
+
+        Box(
+            modifier =
+                Modifier.fillMaxSize(),
+            contentAlignment =
+                Alignment.Center
+        ) {
 
             Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
                 horizontalAlignment =
                     Alignment.CenterHorizontally,
                 verticalArrangement =
-                    Arrangement.Center
+                    Arrangement.spacedBy(12.dp),
+                modifier =
+                    Modifier.padding(24.dp)
             ) {
 
                 Text(
-                    text = "Unable to open EPUB.",
+                    text = "Unable to open EPUB",
                     style =
                         MaterialTheme
                             .typography
-                            .headlineSmall
+                            .titleLarge
                 )
 
                 Text(
-                    text =
-                        error
-                            ?: "Unknown error.",
-                    modifier =
-                        Modifier.padding(
-                            top = 12.dp
-                        )
+                    text = error!!
                 )
 
-                TextButton(
+                Button(
                     onClick = onBack
                 ) {
                     Text("Back")
@@ -207,797 +268,394 @@ fun EpubReaderScreen(
             }
         }
 
-        document != null -> {
+        return
+    }
 
-            val epub =
-                document!!
+    val currentDocument =
+        document
+            ?: return
 
-            ModalNavigationDrawer(
-                drawerState =
-                    androidx.compose.material3
-                        .rememberDrawerState(
-                            DrawerValue.Closed
-                        ),
-                drawerContent = {
+    UniversalReaderTheme(
+        readerTheme = settings.theme
+    ) {
 
-                    ModalDrawerSheet {
+        Scaffold(
 
-                        Text(
-                            text =
-                                epub.title,
-                            style =
-                                MaterialTheme
-                                    .typography
-                                    .titleLarge,
-                            modifier =
-                                Modifier.padding(
-                                    20.dp
-                                )
-                        )
+            topBar = {
 
-                        Divider()
-
-                        NavigationDrawerItem(
-                            label = {
-                                Text("Chapters")
-                            },
-                            selected =
-                                showChapters,
-                            onClick = {
-                                showChapters = true
-                                showSettings = false
-                                showBookmarks = false
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector =
-                                        Icons.Default.Menu,
-                                    contentDescription =
-                                        "Chapters"
-                                )
-                            }
-                        )
-
-                        NavigationDrawerItem(
-                            label = {
-                                Text("Bookmarks")
-                            },
-                            selected =
-                                showBookmarks,
-                            onClick = {
-                                showBookmarks = true
-                                showChapters = false
-                                showSettings = false
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector =
-                                        Icons.Default.Bookmarks,
-                                    contentDescription =
-                                        "Bookmarks"
-                                )
-                            }
-                        )
-
-                        NavigationDrawerItem(
-                            label = {
-                                Text("Settings")
-                            },
-                            selected =
-                                showSettings,
-                            onClick = {
-                                showSettings = true
-                                showChapters = false
-                                showBookmarks = false
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector =
-                                        Icons.Default.Settings,
-                                    contentDescription =
-                                        "Settings"
-                                )
-                            }
-                        )
-                    }
-                }
-            ) {
-
-                Scaffold(
-                    topBar = {
-
-                        TopAppBar(
-                            title = {
-
-                                Text(
-                                    text =
-                                        epub.chapters
-                                            .getOrNull(
-                                                selectedChapter
-                                            )
-                                            ?.title
-                                            ?: epub.title
-                                )
-                            },
-
-                            navigationIcon = {
-
-                                IconButton(
-                                    onClick = onBack
-                                ) {
-
-                                    Icon(
-                                        imageVector =
-                                            Icons.Default.ArrowBack,
-                                        contentDescription =
-                                            "Back"
-                                    )
-                                }
-                            },
-
-                            actions = {
-
-                                IconButton(
-                                    onClick = {
-                                        showSearch = true
-                                    }
-                                ) {
-
-                                    Icon(
-                                        imageVector =
-                                            Icons.Default.Search,
-                                        contentDescription =
-                                            "Search"
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = {
-                                        showAddBookmark = true
-                                    }
-                                ) {
-
-                                    Icon(
-                                        imageVector =
-                                            Icons.Default.Bookmark,
-                                        contentDescription =
-                                            "Add bookmark"
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = {
-                                        showChapters = true
-                                        showSettings = false
-                                        showBookmarks = false
-                                    }
-                                ) {
-
-                                    Icon(
-                                        imageVector =
-                                            Icons.Default.Menu,
-                                        contentDescription =
-                                            "Table of contents"
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = {
-                                        showSettings = true
-                                        showChapters = false
-                                        showBookmarks = false
-                                    }
-                                ) {
-
-                                    Icon(
-                                        imageVector =
-                                            Icons.Default.Settings,
-                                        contentDescription =
-                                            "Settings"
-                                    )
-                                }
-                            }
-                        )
-                    }
-                ) { paddingValues ->
-
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .padding(
-                                    paddingValues
-                                )
-                    ) {
-
-                        EpubChapterPager(
-                            document = epub,
-                            selectedChapter =
-                                selectedChapter,
-                            settings = settings,
-                            uri = uri,
-                            onChapterChanged = {
-                                selectedChapter = it
-                            }
-                        )
-
-                        if (showChapters) {
-
-                            EpubChaptersPanel(
-                                document = epub,
-                                selectedChapter =
-                                    selectedChapter,
-                                onChapterSelected = {
-                                    selectedChapter = it
-                                    showChapters = false
-                                },
-                                onClose = {
-                                    showChapters = false
-                                }
-                            )
-                        }
-
-                        if (showSettings) {
-
-                            EpubSettingsPanel(
-                                settings = settings,
-                                onSettingsChanged = {
-                                    settings = it
-
-                                    ReaderSettingsRepository.save(
-                                        context,
-                                        uri.toString(),
-                                        it
-                                    )
-                                },
-                                onClose = {
-                                    showSettings = false
-                                }
-                            )
-                        }
-
-                        if (showBookmarks) {
-
-                            EpubBookmarksPanel(
-                                uri = uri,
-                                onChapterSelected = {
-                                    selectedChapter = it
-                                    showBookmarks = false
-                                },
-                                onClose = {
-                                    showBookmarks = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (showSearch) {
-
-                EpubSearchDialog(
-                    document = epub,
-                    onResultSelected = {
-                        selectedChapter = it
-                        showSearch = false
-                    },
-                    onClose = {
-                        showSearch = false
-                    }
-                )
-            }
-
-            if (showAddBookmark) {
-
-                AlertDialog(
-                    onDismissRequest = {
-                        showAddBookmark = false
-                    },
+                TopAppBar(
 
                     title = {
-                        Text("Add bookmark")
+                        Text(
+                            currentDocument.title
+                        )
                     },
 
-                    text = {
+                    navigationIcon = {
 
-                        androidx.compose.material3
-                            .OutlinedTextField(
-                                value = bookmarkNote,
-                                onValueChange = {
-                                    bookmarkNote = it
-                                },
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                label = {
-                                    Text(
-                                        "Note (optional)"
-                                    )
-                                }
-                            )
-                    },
-
-                    confirmButton = {
-
-                        TextButton(
-                            onClick = {
-
-                                BookmarkRepository.add(
-                                    context,
-                                    Bookmark(
-                                        id =
-                                            System
-                                                .currentTimeMillis()
-                                                .toString(),
-                                        documentUri =
-                                            uri.toString(),
-                                        chapterIndex =
-                                            selectedChapter,
-                                        title =
-                                            epub.chapters
-                                                .getOrNull(
-                                                    selectedChapter
-                                                )
-                                                ?.title
-                                                ?: "Chapter",
-                                        note =
-                                            bookmarkNote
-                                    )
-                                )
-
-                                bookmarkNote = ""
-                                showAddBookmark = false
-                            }
+                        IconButton(
+                            onClick = onBack
                         ) {
-                            Text("Save")
+
+                            Icon(
+                                imageVector =
+                                    Icons.Default.Close,
+                                contentDescription =
+                                    "Back"
+                            )
                         }
                     },
 
-                    dismissButton = {
+                    actions = {
 
-                        TextButton(
+                        IconButton(
                             onClick = {
-                                showAddBookmark = false
+                                showChapters = true
                             }
                         ) {
-                            Text("Cancel")
+
+                            Icon(
+                                imageVector =
+                                    Icons.Default.Menu,
+                                contentDescription =
+                                    "Chapters"
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                showSearch = true
+                            }
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Default.Search,
+                                contentDescription =
+                                    "Search"
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                showAddBookmark = true
+                            }
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Default.BookmarkAdd,
+                                contentDescription =
+                                    "Add bookmark"
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                showBookmarks = true
+                            }
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Default.Bookmarks,
+                                contentDescription =
+                                    "Bookmarks"
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                showSettings = true
+                            }
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Default.Settings,
+                                contentDescription =
+                                    "Settings"
+                            )
                         }
                     }
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun EpubChapterPager(
-    document: EpubDocument,
-    selectedChapter: Int,
-    settings: ReaderSettings,
-    uri: Uri,
-    onChapterChanged: (Int) -> Unit
-) {
-
-    val safeChapter =
-        selectedChapter.coerceIn(
-            0,
-            document.chapters.lastIndex
-                .coerceAtLeast(0)
-        )
-
-    val listState =
-        rememberLazyListState()
-
-    LaunchedEffect(
-        safeChapter,
-        document.chapters.size
-    ) {
-
-        if (
-            document.chapters.isNotEmpty()
-        ) {
-
-            listState.scrollToItem(
-                safeChapter
-            )
-        }
-    }
-
-    LaunchedEffect(
-        listState.firstVisibleItemIndex,
-        listState.firstVisibleItemScrollOffset
-    ) {
-
-        if (
-            document.chapters.isNotEmpty()
-        ) {
-
-            val current =
-                listState
-                    .firstVisibleItemIndex
-                    .coerceIn(
-                        0,
-                        document.chapters.lastIndex
-                    )
-
-            onChapterChanged(current)
-
-            ReadingPositionRepository.save(
-                androidx.compose.ui.platform
-                    .LocalContext.current,
-                uri.toString(),
-                ReadingPosition(
-                    documentUri =
-                        uri.toString(),
-                    chapterIndex =
-                        current,
-                    scrollIndex =
-                        listState
-                            .firstVisibleItemIndex,
-                    scrollOffset =
-                        listState
-                            .firstVisibleItemScrollOffset
-                )
-            )
-        }
-    }
-
-    LazyColumn(
-        state = listState,
-        modifier =
-            Modifier.fillMaxSize()
-    ) {
-
-        itemsIndexed(
-            items = document.chapters,
-            key = { index, chapter ->
-                "${index}_${chapter.title}"
-            }
-        ) { _, chapter ->
+        ) { padding ->
 
             Column(
                 modifier =
                     Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            vertical = 16.dp
-                        )
+                        .fillMaxSize()
+                        .padding(padding)
             ) {
 
-                Text(
-                    text =
-                        chapter.title,
-                    style =
-                        MaterialTheme
-                            .typography
-                            .headlineSmall,
+                ReadingProgress(
+                    currentItem =
+                        selectedChapter,
+                    totalItems =
+                        currentDocument
+                            .chapters
+                            .size
+                )
+
+                LazyColumn(
+                    state = listState,
                     modifier =
-                        Modifier.padding(
-                            horizontal = 16.dp,
-                            vertical = 8.dp
+                        Modifier.fillMaxSize(),
+                    contentPadding =
+                        PaddingValues(
+                            top = 8.dp,
+                            bottom = 48.dp
                         )
-                )
+                ) {
 
-                EpubChapterContent(
-                    chapter = chapter,
-                    document = document,
-                    fontSize =
-                        settings.fontSize,
-                    lineSpacing =
-                        settings.lineSpacing
-                )
-            }
-        }
-    }
-}
+                    items(
+                        items =
+                            currentDocument.chapters,
+                        key = { chapter ->
+                            chapter.title +
+                                "_" +
+                                currentDocument
+                                    .chapters
+                                    .indexOf(
+                                        chapter
+                                    )
+                        }
+                    ) { chapter ->
 
-@Composable
-private fun EpubChaptersPanel(
-    document: EpubDocument,
-    selectedChapter: Int,
-    onChapterSelected: (Int) -> Unit,
-    onClose: () -> Unit
-) {
-
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-    ) {
-
-        Row(
-            modifier =
-                Modifier.fillMaxWidth(),
-            verticalAlignment =
-                Alignment.CenterVertically
-        ) {
-
-            Text(
-                text = "Table of Contents",
-                style =
-                    MaterialTheme
-                        .typography
-                        .headlineSmall,
-                modifier =
-                    Modifier.weight(1f)
-            )
-
-            IconButton(
-                onClick = onClose
-            ) {
-
-                Icon(
-                    imageVector =
-                        Icons.Default.Close,
-                    contentDescription =
-                        "Close"
-                )
-            }
-        }
-
-        Divider()
-
-        LazyColumn {
-
-            itemsIndexed(
-                document.chapters
-            ) { index, chapter ->
-
-                NavigationDrawerItem(
-                    label = {
-                        Text(
-                            chapter.title
-                        )
-                    },
-                    selected =
-                        index == selectedChapter,
-                    onClick = {
-                        onChapterSelected(
-                            index
-                        )
-                    },
-                    modifier =
-                        Modifier.fillMaxWidth()
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun EpubSettingsPanel(
-    settings: ReaderSettings,
-    onSettingsChanged: (ReaderSettings) -> Unit,
-    onClose: () -> Unit
-) {
-
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-    ) {
-
-        Row(
-            modifier =
-                Modifier.fillMaxWidth(),
-            verticalAlignment =
-                Alignment.CenterVertically
-        ) {
-
-            Text(
-                text = "Reader Settings",
-                style =
-                    MaterialTheme
-                        .typography
-                        .headlineSmall,
-                modifier =
-                    Modifier.weight(1f)
-            )
-
-            IconButton(
-                onClick = onClose
-            ) {
-
-                Icon(
-                    imageVector =
-                        Icons.Default.Close,
-                    contentDescription =
-                        "Close"
-                )
-            }
-        }
-
-        Divider()
-
-        ReaderSettingsPanel(
-            settings = settings,
-            onSettingsChanged =
-                onSettingsChanged
-        )
-    }
-}
-
-@Composable
-private fun EpubBookmarksPanel(
-    uri: Uri,
-    onChapterSelected: (Int) -> Unit,
-    onClose: () -> Unit
-) {
-
-    val context =
-        androidx.compose.ui.platform.LocalContext.current
-
-    var bookmarks by remember {
-        mutableStateOf(
-            BookmarkRepository.getForDocument(
-                context,
-                uri.toString()
-            )
-        )
-    }
-
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-    ) {
-
-        Row(
-            modifier =
-                Modifier.fillMaxWidth(),
-            verticalAlignment =
-                Alignment.CenterVertically
-        ) {
-
-            Text(
-                text = "Bookmarks",
-                style =
-                    MaterialTheme
-                        .typography
-                        .headlineSmall,
-                modifier =
-                    Modifier.weight(1f)
-            )
-
-            IconButton(
-                onClick = onClose
-            ) {
-
-                Icon(
-                    imageVector =
-                        Icons.Default.Close,
-                    contentDescription =
-                        "Close"
-                )
-            }
-        }
-
-        Divider()
-
-        if (bookmarks.isEmpty()) {
-
-            Text(
-                text = "No bookmarks yet.",
-                modifier =
-                    Modifier.padding(
-                        top = 20.dp
-                    )
-            )
-
-        } else {
-
-            LazyColumn {
-
-                items(
-                    items = bookmarks,
-                    key = {
-                        it.id
-                    }
-                ) { bookmark ->
-
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    vertical = 8.dp
-                                ),
-                        verticalAlignment =
-                            Alignment.CenterVertically
-                    ) {
-
-                        TextButton(
-                            onClick = {
-                                onChapterSelected(
-                                    bookmark.chapterIndex
-                                )
-                            },
+                        Column(
                             modifier =
-                                Modifier.weight(1f)
+                                Modifier.fillMaxWidth()
                         ) {
 
-                            Column {
+                            if (
+                                chapter.title
+                                    .isNotBlank()
+                            ) {
 
                                 Text(
-                                    bookmark.title
+                                    text =
+                                        chapter.title,
+                                    style =
+                                        MaterialTheme
+                                            .typography
+                                            .headlineSmall,
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(
+                                                horizontal = 16.dp,
+                                                vertical = 16.dp
+                                            )
                                 )
-
-                                if (
-                                    bookmark.note
-                                        .isNotBlank()
-                                ) {
-
-                                    Text(
-                                        text =
-                                            bookmark.note,
-                                        style =
-                                            MaterialTheme
-                                                .typography
-                                                .bodySmall
-                                    )
-                                }
                             }
-                        }
 
-                        TextButton(
-                            onClick = {
-
-                                BookmarkRepository.remove(
-                                    context,
-                                    bookmark.id
-                                )
-
-                                bookmarks =
-                                    BookmarkRepository
-                                        .getForDocument(
-                                            context,
-                                            uri.toString()
-                                        )
-                            }
-                        ) {
-                            Text("Delete")
+                            EpubChapterContent(
+                                chapter =
+                                    chapter,
+                                document =
+                                    currentDocument,
+                                fontSize =
+                                    settings.fontSize,
+                                lineSpacing =
+                                    settings.lineSpacing,
+                                textAlignment =
+                                    settings.textAlignment
+                            )
                         }
                     }
                 }
             }
         }
+    }
+
+    if (showSearch) {
+
+        EpubSearchDialog(
+            document =
+                currentDocument,
+            query =
+                searchQuery,
+            onQueryChanged = {
+                searchQuery = it
+            },
+            onDismiss = {
+                showSearch = false
+            },
+            onResultSelected = { chapterIndex ->
+
+                showSearch = false
+
+                selectedChapter =
+                    chapterIndex
+
+                scope.launch {
+
+                    listState.animateScrollToItem(
+                        chapterIndex
+                    )
+                }
+            }
+        )
+    }
+
+    if (showChapters) {
+
+        EpubChapterDialog(
+            document =
+                currentDocument,
+            currentChapter =
+                selectedChapter,
+            onDismiss = {
+                showChapters = false
+            },
+            onChapterSelected = { index ->
+
+                showChapters = false
+
+                selectedChapter =
+                    index
+
+                scope.launch {
+
+                    listState.animateScrollToItem(
+                        index
+                    )
+                }
+            }
+        )
+    }
+
+    if (showBookmarks) {
+
+        EpubBookmarkDialog(
+            context = context,
+            documentUri =
+                uri.toString(),
+            onDismiss = {
+                showBookmarks = false
+            },
+            onBookmarkSelected = { index ->
+
+                showBookmarks = false
+
+                selectedChapter =
+                    index
+
+                scope.launch {
+
+                    listState.animateScrollToItem(
+                        index
+                    )
+                }
+            }
+        )
+    }
+
+    if (showSettings) {
+
+        AlertDialog(
+
+            onDismissRequest = {
+                showSettings = false
+            },
+
+            title = {
+                Text("Reader settings")
+            },
+
+            text = {
+
+                ReaderSettingsPanel(
+                    settings = settings,
+                    onSettingsChanged = {
+
+                        settings = it
+
+                        ReaderSettingsRepository.save(
+                            context,
+                            uri.toString(),
+                            it
+                        )
+                    }
+                )
+            },
+
+            confirmButton = {
+
+                TextButton(
+                    onClick = {
+                        showSettings = false
+                    }
+                ) {
+                    Text("Done")
+                }
+            }
+        )
+    }
+
+    if (showAddBookmark) {
+
+        AddEpubBookmarkDialog(
+            currentChapter =
+                selectedChapter,
+            document =
+                currentDocument,
+            onDismiss = {
+                showAddBookmark = false
+            },
+            onSave = { title, note ->
+
+                BookmarkRepository.add(
+                    context,
+                    Bookmark(
+                        id =
+                            UUID
+                                .randomUUID()
+                                .toString(),
+                        documentUri =
+                            uri.toString(),
+                        chapterIndex =
+                            selectedChapter,
+                        title =
+                            title,
+                        note =
+                            note
+                    )
+                )
+
+                showAddBookmark = false
+            }
+        )
     }
 }
 
 @Composable
 private fun EpubSearchDialog(
     document: EpubDocument,
-    onResultSelected: (Int) -> Unit,
-    onClose: () -> Unit
+    query: String,
+    onQueryChanged:
+        (String) -> Unit,
+    onDismiss: () -> Unit,
+    onResultSelected:
+        (Int) -> Unit
 ) {
-
-    var query by remember {
-        mutableStateOf("")
-    }
 
     val results =
         remember(
-            query,
-            document
+            document,
+            query
         ) {
 
-            if (
-                query.isBlank()
-            ) {
-                emptyList()
-            } else {
-
-                DocumentSearch.search(
-                    document,
-                    query
-                )
-            }
+            DocumentSearch.search(
+                document,
+                query
+            )
         }
 
     AlertDialog(
-        onDismissRequest = onClose,
+
+        onDismissRequest = onDismiss,
 
         title = {
             Text("Search book")
@@ -1005,51 +663,64 @@ private fun EpubSearchDialog(
 
         text = {
 
-            Column {
+            Column(
+                verticalArrangement =
+                    Arrangement.spacedBy(8.dp)
+            ) {
 
-                androidx.compose.material3
-                    .OutlinedTextField(
-                        value = query,
-                        onValueChange = {
-                            query = it
-                        },
-                        modifier =
-                            Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        label = {
-                            Text("Search")
-                        }
-                    )
+                OutlinedTextField(
+                    value = query,
+                    onValueChange =
+                        onQueryChanged,
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = {
+                        Text("Search")
+                    }
+                )
 
                 LazyColumn(
                     modifier =
                         Modifier
                             .fillMaxWidth()
                             .padding(
-                                top = 12.dp
+                                top = 8.dp
                             )
                 ) {
 
                     items(
-                        items = results
+                        results
                     ) { result ->
 
-                        TextButton(
+                        Card(
                             onClick = {
                                 onResultSelected(
                                     result.chapterIndex
                                 )
-                            }
+                            },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        vertical = 4.dp
+                                    )
                         ) {
 
                             Column(
                                 modifier =
-                                    Modifier.fillMaxWidth()
+                                    Modifier.padding(
+                                        12.dp
+                                    )
                             ) {
 
                                 Text(
                                     text =
-                                        result.chapterTitle
+                                        result.chapterTitle,
+                                    style =
+                                        MaterialTheme
+                                            .typography
+                                            .titleMedium
                                 )
 
                                 Text(
@@ -1058,7 +729,7 @@ private fun EpubSearchDialog(
                                     style =
                                         MaterialTheme
                                             .typography
-                                            .bodySmall
+                                            .bodyMedium
                                 )
                             }
                         }
@@ -1070,9 +741,281 @@ private fun EpubSearchDialog(
         confirmButton = {
 
             TextButton(
-                onClick = onClose
+                onClick = onDismiss
             ) {
                 Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun EpubChapterDialog(
+    document: EpubDocument,
+    currentChapter: Int,
+    onDismiss: () -> Unit,
+    onChapterSelected:
+        (Int) -> Unit
+) {
+
+    AlertDialog(
+
+        onDismissRequest = onDismiss,
+
+        title = {
+            Text("Chapters")
+        },
+
+        text = {
+
+            LazyColumn(
+                modifier =
+                    Modifier.fillMaxWidth()
+            ) {
+
+                items(
+                    items =
+                        document.chapters
+                            .mapIndexed {
+                                index,
+                                chapter ->
+                                index to chapter
+                            }
+                ) { item ->
+
+                    val index =
+                        item.first
+
+                    val chapter =
+                        item.second
+
+                    TextButton(
+                        onClick = {
+                            onChapterSelected(
+                                index
+                            )
+                        },
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    ) {
+
+                        Text(
+                            text =
+                                if (
+                                    index ==
+                                    currentChapter
+                                ) {
+                                    "▶ ${chapter.title}"
+                                } else {
+                                    chapter.title
+                                }
+                        )
+                    }
+                }
+            }
+        },
+
+        confirmButton = {
+
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun EpubBookmarkDialog(
+    context: android.content.Context,
+    documentUri: String,
+    onDismiss: () -> Unit,
+    onBookmarkSelected:
+        (Int) -> Unit
+) {
+
+    val bookmarks =
+        remember(
+            documentUri
+        ) {
+
+            BookmarkRepository
+                .getForDocument(
+                    context,
+                    documentUri
+                )
+        }
+
+    AlertDialog(
+
+        onDismissRequest = onDismiss,
+
+        title = {
+            Text("Bookmarks")
+        },
+
+        text = {
+
+            if (bookmarks.isEmpty()) {
+
+                Text(
+                    "No bookmarks yet."
+                )
+
+            } else {
+
+                LazyColumn(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                ) {
+
+                    items(
+                        items = bookmarks,
+                        key = {
+                            it.id
+                        }
+                    ) { bookmark ->
+
+                        TextButton(
+                            onClick = {
+                                onBookmarkSelected(
+                                    bookmark.chapterIndex
+                                )
+                            },
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+
+                            Column(
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                            ) {
+
+                                Text(
+                                    bookmark.title
+                                )
+
+                                if (
+                                    bookmark.note
+                                        .isNotBlank()
+                                ) {
+
+                                    Text(
+                                        bookmark.note,
+                                        style =
+                                            MaterialTheme
+                                                .typography
+                                                .bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+
+        confirmButton = {
+
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun AddEpubBookmarkDialog(
+    currentChapter: Int,
+    document: EpubDocument,
+    onDismiss: () -> Unit,
+    onSave:
+        (String, String) -> Unit
+) {
+
+    var title by remember {
+
+        mutableStateOf(
+            document.chapters
+                .getOrNull(currentChapter)
+                ?.title
+                ?.ifBlank {
+                    "Bookmark"
+                }
+                ?: "Bookmark"
+        )
+    }
+
+    var note by remember {
+        mutableStateOf("")
+    }
+
+    AlertDialog(
+
+        onDismissRequest = onDismiss,
+
+        title = {
+            Text("Add bookmark")
+        },
+
+        text = {
+
+            Column(
+                verticalArrangement =
+                    Arrangement.spacedBy(12.dp)
+            ) {
+
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = {
+                        title = it
+                    },
+                    label = {
+                        Text("Title")
+                    },
+                    modifier =
+                        Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = {
+                        note = it
+                    },
+                    label = {
+                        Text("Note")
+                    },
+                    modifier =
+                        Modifier.fillMaxWidth()
+                )
+            }
+        },
+
+        dismissButton = {
+
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("Cancel")
+            }
+        },
+
+        confirmButton = {
+
+            Button(
+                onClick = {
+                    onSave(
+                        title.ifBlank {
+                            "Bookmark"
+                        },
+                        note
+                    )
+                }
+            ) {
+                Text("Save")
             }
         }
     )
