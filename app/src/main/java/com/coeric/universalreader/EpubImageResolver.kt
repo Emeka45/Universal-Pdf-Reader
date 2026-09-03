@@ -16,7 +16,10 @@ object EpubImageResolver {
             normalize(path)
 
         return document.images.firstOrNull {
-            normalize(it.path) == normalized
+            normalize(it.path) == normalized ||
+                normalize(
+                    it.path.substringAfterLast("/")
+                ) == normalized.substringAfterLast("/")
         }
     }
 
@@ -35,7 +38,6 @@ object EpubImageResolver {
         } catch (
             exception: Exception
         ) {
-
             null
         }
     }
@@ -45,13 +47,8 @@ object EpubImageResolver {
     ): String {
 
         return path
-            .replace(
-                '\\',
-                '/'
-            )
-            .removePrefix(
-                "./"
-            )
+            .replace('\\', '/')
+            .removePrefix("./")
             .trim()
     }
 }
