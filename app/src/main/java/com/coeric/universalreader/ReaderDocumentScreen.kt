@@ -1,7 +1,6 @@
 package com.coeric.universalreader
 
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,10 +53,6 @@ fun ReaderDocumentScreen(
     val context =
         androidx.compose.ui.platform.LocalContext.current
 
-    val backDispatcher =
-        LocalOnBackPressedDispatcherOwner.current
-            ?.onBackPressedDispatcher
-
     var showChapterList by remember {
         mutableStateOf(false)
     }
@@ -82,8 +77,25 @@ fun ReaderDocumentScreen(
         mutableStateOf(false)
     }
 
-    var selectedChapter by remember {
-        mutableStateOf(0)
+    val savedPosition =
+        remember(documentUri) {
+            ReadingPositionRepository.get(
+                context,
+                documentUri
+            )
+        }
+
+    var selectedChapter by remember(documentUri) {
+        mutableStateOf(
+            savedPosition
+                ?.chapterIndex
+                ?.coerceIn(
+                    0,
+                    (document.chapters.size - 1)
+                        .coerceAtLeast(0)
+                )
+                ?: 0
+        )
     }
 
     var settings by remember(documentUri) {
@@ -142,7 +154,14 @@ fun ReaderDocumentScreen(
             }
 
             else -> {
-                backDispatcher?.onBackPressed()
+                /*
+                 * ReaderDocumentScreen is hosted inside
+                 * ReaderActivity. Finishing the activity
+                 * provides a clean exit without recursively
+                 * dispatching another back event.
+                 */
+                (context as? android.app.Activity)
+                    ?.finish()
             }
         }
     }
@@ -165,10 +184,11 @@ fun ReaderDocumentScreen(
                 onAdded = {
 
                     bookmarks =
-                        BookmarkRepository.getForDocument(
-                            context,
-                            documentUri
-                        )
+                        BookmarkRepository
+                            .getForDocument(
+                                context,
+                                documentUri
+                            )
 
                     showAddBookmark = false
                 }
@@ -178,7 +198,9 @@ fun ReaderDocumentScreen(
         Scaffold(
 
             containerColor =
-                MaterialTheme.colorScheme.background,
+                MaterialTheme
+                    .colorScheme
+                    .background,
 
             topBar = {
 
@@ -187,7 +209,8 @@ fun ReaderDocumentScreen(
                     title = {
 
                         Text(
-                            text = document.title,
+                            text =
+                                document.title,
                             maxLines = 1
                         )
                     },
@@ -224,8 +247,8 @@ fun ReaderDocumentScreen(
                                     }
 
                                     else -> {
-                                        backDispatcher
-                                            ?.onBackPressed()
+                                        (context as? android.app.Activity)
+                                            ?.finish()
                                     }
                                 }
                             }
@@ -269,7 +292,8 @@ fun ReaderDocumentScreen(
                         IconButton(
                             onClick = {
 
-                                showAddBookmark = true
+                                showAddBookmark =
+                                    true
 
                                 showSearch = false
                                 showSettings = false
@@ -498,10 +522,11 @@ fun ReaderDocumentScreen(
                             )
 
                             bookmarks =
-                                BookmarkRepository.getForDocument(
-                                    context,
-                                    documentUri
-                                )
+                                BookmarkRepository
+                                    .getForDocument(
+                                        context,
+                                        documentUri
+                                    )
                         },
 
                         modifier =
@@ -534,16 +559,18 @@ fun ReaderDocumentScreen(
                         onDelete = {
                             highlight ->
 
-                            HighlightRepository.removeHighlight(
-                                context,
-                                highlight.id
-                            )
+                            HighlightRepository
+                                .removeHighlight(
+                                    context,
+                                    highlight.id
+                                )
 
                             highlights =
-                                HighlightRepository.getHighlights(
-                                    context,
-                                    documentUri
-                                )
+                                HighlightRepository
+                                    .getHighlights(
+                                        context,
+                                        documentUri
+                                    )
                         },
 
                         modifier =
@@ -568,19 +595,21 @@ fun ReaderDocumentScreen(
                         onBookmarkAdded = {
 
                             bookmarks =
-                                BookmarkRepository.getForDocument(
-                                    context,
-                                    documentUri
-                                )
+                                BookmarkRepository
+                                    .getForDocument(
+                                        context,
+                                        documentUri
+                                    )
                         },
 
                         onHighlightAdded = {
 
                             highlights =
-                                HighlightRepository.getHighlights(
-                                    context,
-                                    documentUri
-                                )
+                                HighlightRepository
+                                    .getHighlights(
+                                        context,
+                                        documentUri
+                                    )
                         },
 
                         modifier =
@@ -1069,13 +1098,21 @@ private fun DocumentContent(
             )
         }
 
-    var restoredPosition by remember(
+    var restorationComplete by remember(
         documentUri
     ) {
         mutableStateOf(false)
     }
 
-    LaunchedEffect(savedPosition) {
+    /*
+     * Restore the exact saved list position before
+     * allowing normal position tracking to write
+     * anything back to storage.
+     */
+    LaunchedEffect(
+        documentUri,
+        savedPosition
+    ) {
 
         if (savedPosition != null) {
 
@@ -1090,23 +1127,30 @@ private fun DocumentContent(
                     )
 
             listState.scrollToItem(
-                scrollIndex,
-                savedPosition.scrollOffset
-                    .coerceAtLeast(0)
+                index = scrollIndex,
+                scrollOffset =
+                    savedPosition
+                        .scrollOffset
+                        .coerceAtLeast(0)
             )
         }
 
-        restoredPosition =
-            true
+        restorationComplete = true
     }
 
+    /*
+     * When the user selects a chapter manually,
+     * move the list to that chapter.
+     *
+     * Do not run this during initial restoration.
+     */
     LaunchedEffect(
         selectedChapter,
-        restoredPosition
+        restorationComplete
     ) {
 
         if (
-            restoredPosition &&
+            restorationComplete &&
             document.chapters.isNotEmpty()
         ) {
 
@@ -1119,7 +1163,8 @@ private fun DocumentContent(
                 )
 
             if (
-                listState.firstVisibleItemIndex == 0
+                listState.firstVisibleItemIndex !=
+                    target
             ) {
 
                 listState.scrollToItem(
@@ -1129,9 +1174,18 @@ private fun DocumentContent(
         }
     }
 
+    /*
+     * Update the selected chapter as the reader
+     * moves through the document.
+     */
     LaunchedEffect(
-        listState.firstVisibleItemIndex
+        listState.firstVisibleItemIndex,
+        restorationComplete
     ) {
+
+        if (!restorationComplete) {
+            return@LaunchedEffect
+        }
 
         val visibleIndex =
             listState.firstVisibleItemIndex
@@ -1159,11 +1213,20 @@ private fun DocumentContent(
         }
     }
 
+    /*
+     * Save reading position only after the initial
+     * restoration has completed.
+     */
     LaunchedEffect(
         listState.firstVisibleItemIndex,
         listState.firstVisibleItemScrollOffset,
-        selectedChapter
+        selectedChapter,
+        restorationComplete
     ) {
+
+        if (!restorationComplete) {
+            return@LaunchedEffect
+        }
 
         ReadingPositionRepository.save(
 
