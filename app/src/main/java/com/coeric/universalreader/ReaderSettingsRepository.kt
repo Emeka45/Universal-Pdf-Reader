@@ -4,62 +4,46 @@ import android.content.Context
 
 object ReaderSettingsRepository {
 
-    private const val PREFS_NAME =
+    private const val PREFS =
         "universal_reader_settings"
-
-    private const val FONT_SIZE =
-        "font_size"
-
-    private const val LINE_SPACING =
-        "line_spacing"
-
-    private const val THEME =
-        "theme"
-
-    private const val TEXT_ALIGNMENT =
-        "text_alignment"
 
     fun get(
         context: Context,
         documentUri: String
     ): ReaderSettings {
 
-        val preferences =
+        val prefs =
             context.getSharedPreferences(
-                PREFS_NAME,
+                PREFS,
                 Context.MODE_PRIVATE
             )
 
+        val prefix =
+            documentUri.hashCode()
+                .toString()
+
         val fontSize =
-            preferences.getFloat(
-                "${documentUri}_$FONT_SIZE",
+            prefs.getFloat(
+                "${prefix}_font_size",
                 18f
             )
 
         val lineSpacing =
-            preferences.getFloat(
-                "${documentUri}_$LINE_SPACING",
+            prefs.getFloat(
+                "${prefix}_line_spacing",
                 1.55f
-            )
-
-        val themeName =
-            preferences.getString(
-                "${documentUri}_$THEME",
-                ReaderTheme.LIGHT.name
-            )
-
-        val alignmentName =
-            preferences.getString(
-                "${documentUri}_$TEXT_ALIGNMENT",
-                ReaderTextAlignment.LEFT.name
             )
 
         val theme =
             try {
+
                 ReaderTheme.valueOf(
-                    themeName
-                        ?: ReaderTheme.LIGHT.name
+                    prefs.getString(
+                        "${prefix}_theme",
+                        ReaderTheme.LIGHT.name
+                    )!!
                 )
+
             } catch (
                 exception: Exception
             ) {
@@ -68,10 +52,14 @@ object ReaderSettingsRepository {
 
         val alignment =
             try {
+
                 ReaderTextAlignment.valueOf(
-                    alignmentName
-                        ?: ReaderTextAlignment.LEFT.name
+                    prefs.getString(
+                        "${prefix}_alignment",
+                        ReaderTextAlignment.LEFT.name
+                    )!!
                 )
+
             } catch (
                 exception: Exception
             ) {
@@ -92,26 +80,30 @@ object ReaderSettingsRepository {
         settings: ReaderSettings
     ) {
 
+        val prefix =
+            documentUri.hashCode()
+                .toString()
+
         context
             .getSharedPreferences(
-                PREFS_NAME,
+                PREFS,
                 Context.MODE_PRIVATE
             )
             .edit()
             .putFloat(
-                "${documentUri}_$FONT_SIZE",
+                "${prefix}_font_size",
                 settings.fontSize
             )
             .putFloat(
-                "${documentUri}_$LINE_SPACING",
+                "${prefix}_line_spacing",
                 settings.lineSpacing
             )
             .putString(
-                "${documentUri}_$THEME",
+                "${prefix}_theme",
                 settings.theme.name
             )
             .putString(
-                "${documentUri}_$TEXT_ALIGNMENT",
+                "${prefix}_alignment",
                 settings.textAlignment.name
             )
             .apply()
@@ -122,23 +114,27 @@ object ReaderSettingsRepository {
         documentUri: String
     ) {
 
+        val prefix =
+            documentUri.hashCode()
+                .toString()
+
         context
             .getSharedPreferences(
-                PREFS_NAME,
+                PREFS,
                 Context.MODE_PRIVATE
             )
             .edit()
             .remove(
-                "${documentUri}_$FONT_SIZE"
+                "${prefix}_font_size"
             )
             .remove(
-                "${documentUri}_$LINE_SPACING"
+                "${prefix}_line_spacing"
             )
             .remove(
-                "${documentUri}_$THEME"
+                "${prefix}_theme"
             )
             .remove(
-                "${documentUri}_$TEXT_ALIGNMENT"
+                "${prefix}_alignment"
             )
             .apply()
     }
