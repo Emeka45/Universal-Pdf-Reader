@@ -19,8 +19,7 @@ object ReaderSettingsRepository {
             )
 
         val prefix =
-            documentUri.hashCode()
-                .toString()
+            documentUri.hashCode().toString()
 
         val fontSize =
             prefs.getFloat(
@@ -41,12 +40,13 @@ object ReaderSettingsRepository {
                     prefs.getString(
                         "${prefix}_theme",
                         ReaderTheme.LIGHT.name
-                    )!!
+                    ) ?: ReaderTheme.LIGHT.name
                 )
 
             } catch (
                 exception: Exception
             ) {
+
                 ReaderTheme.LIGHT
             }
 
@@ -57,12 +57,13 @@ object ReaderSettingsRepository {
                     prefs.getString(
                         "${prefix}_alignment",
                         ReaderTextAlignment.LEFT.name
-                    )!!
+                    ) ?: ReaderTextAlignment.LEFT.name
                 )
 
             } catch (
                 exception: Exception
             ) {
+
                 ReaderTextAlignment.LEFT
             }
 
@@ -81,8 +82,7 @@ object ReaderSettingsRepository {
     ) {
 
         val prefix =
-            documentUri.hashCode()
-                .toString()
+            documentUri.hashCode().toString()
 
         context
             .getSharedPreferences(
@@ -115,8 +115,7 @@ object ReaderSettingsRepository {
     ) {
 
         val prefix =
-            documentUri.hashCode()
-                .toString()
+            documentUri.hashCode().toString()
 
         context
             .getSharedPreferences(
