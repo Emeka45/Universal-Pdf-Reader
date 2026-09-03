@@ -6,78 +6,74 @@ import org.json.JSONObject
 
 object BookmarkRepository {
 
-    private const val PREFS_NAME =
+    private const val PREFS =
         "universal_reader_bookmarks"
 
-    private const val KEY_BOOKMARKS =
+    private const val KEY =
         "bookmarks"
 
     fun getAll(
         context: Context
     ): List<Bookmark> {
 
-        val preferences =
-            context.getSharedPreferences(
-                PREFS_NAME,
-                Context.MODE_PRIVATE
-            )
-
         val json =
-            preferences.getString(
-                KEY_BOOKMARKS,
-                "[]"
-            ) ?: "[]"
+            context
+                .getSharedPreferences(
+                    PREFS,
+                    Context.MODE_PRIVATE
+                )
+                .getString(
+                    KEY,
+                    "[]"
+                )
+                ?: "[]"
 
         return try {
 
             val array =
                 JSONArray(json)
 
-            val bookmarks =
-                mutableListOf<Bookmark>()
+            buildList {
 
-            for (
-                index in 0 until array.length()
-            ) {
+                for (
+                    i in 0 until array.length()
+                ) {
 
-                val item =
-                    array.getJSONObject(index)
+                    val item =
+                        array.getJSONObject(i)
 
-                bookmarks.add(
-                    Bookmark(
-                        id =
-                            item.optString(
-                                "id"
-                            ),
-                        documentUri =
-                            item.optString(
-                                "documentUri"
-                            ),
-                        chapterIndex =
-                            item.optInt(
-                                "chapterIndex",
-                                0
-                            ),
-                        title =
-                            item.optString(
-                                "title",
-                                "Bookmark"
-                            ),
-                        note =
-                            item.optString(
-                                "note",
-                                ""
-                            ),
-                        createdAt =
-                            item.optLong(
-                                "createdAt",
-                                System.currentTimeMillis()
-                            )
+                    add(
+                        Bookmark(
+                            id =
+                                item.optString(
+                                    "id"
+                                ),
+                            documentUri =
+                                item.optString(
+                                    "documentUri"
+                                ),
+                            chapterIndex =
+                                item.optInt(
+                                    "chapterIndex"
+                                ),
+                            title =
+                                item.optString(
+                                    "title",
+                                    "Bookmark"
+                                ),
+                            note =
+                                item.optString(
+                                    "note",
+                                    ""
+                                ),
+                            createdAt =
+                                item.optLong(
+                                    "createdAt"
+                                )
+                        )
                     )
-                )
+                }
             }
-
-            bookmarks
 
         } catch (
             exception: Exception
@@ -105,63 +101,33 @@ object BookmarkRepository {
         bookmark: Bookmark
     ) {
 
-        val bookmarks =
+        val list =
             getAll(context)
                 .toMutableList()
 
-        bookmarks.removeAll {
+        list.removeAll {
             it.id == bookmark.id
         }
 
-        bookmarks.add(bookmark)
+        list.add(bookmark)
 
         saveAll(
             context,
-            bookmarks
+            list
         )
     }
 
     fun remove(
         context: Context,
-        bookmarkId: String
+        id: String
     ) {
 
-        val bookmarks =
+        saveAll(
+            context,
             getAll(context)
                 .filter {
-                    it.id != bookmarkId
+                    it.id != id
                 }
-
-        saveAll(
-            context,
-            bookmarks
-        )
-    }
-
-    fun removeForDocument(
-        context: Context,
-        documentUri: String
-    ) {
-
-        val bookmarks =
-            getAll(context)
-                .filter {
-                    it.documentUri != documentUri
-                }
-
-        saveAll(
-            context,
-            bookmarks
-        )
-    }
-
-    fun clear(
-        context: Context
-    ) {
-
-        saveAll(
-            context,
-            emptyList()
         )
     }
 
@@ -173,56 +139,52 @@ object BookmarkRepository {
         val array =
             JSONArray()
 
-        for (
-            bookmark in bookmarks
-        ) {
-
-            val objectJson =
-                JSONObject()
-
-            objectJson.put(
-                "id",
-                bookmark.id
-            )
-
-            objectJson.put(
-                "documentUri",
-                bookmark.documentUri
-            )
-
-            objectJson.put(
-                "chapterIndex",
-                bookmark.chapterIndex
-            )
-
-            objectJson.put(
-                "title",
-                bookmark.title
-            )
-
-            objectJson.put(
-                "note",
-                bookmark.note
-            )
-
-            objectJson.put(
-                "createdAt",
-                bookmark.createdAt
-            )
+        bookmarks.forEach { bookmark ->
 
             array.put(
-                objectJson
+                JSONObject().apply {
+
+                    put(
+                        "id",
+                        bookmark.id
+                    )
+
+                    put(
+                        "documentUri",
+                        bookmark.documentUri
+                    )
+
+                    put(
+                        "chapterIndex",
+                        bookmark.chapterIndex
+                    )
+
+                    put(
+                        "title",
+                        bookmark.title
+                    )
+
+                    put(
+                        "note",
+                        bookmark.note
+                    )
+
+                    put(
+                        "createdAt",
+                        bookmark.createdAt
+                    )
+                }
             )
         }
 
         context
             .getSharedPreferences(
-                PREFS_NAME,
+                PREFS,
                 Context.MODE_PRIVATE
             )
             .edit()
             .putString(
-                KEY_BOOKMARKS,
+                KEY,
                 array.toString()
             )
             .apply()
