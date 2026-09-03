@@ -1,5 +1,6 @@
 package com.coeric.universalreader
 
+import android.net.Uri
 import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -8,11 +9,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.commit
-import org.readium.r2.shared.publication.Publication
 
 @Composable
 fun ReadiumEpubScreen(
-    publication: Publication,
+    uri: Uri,
     activity: FragmentActivity,
     modifier: Modifier = Modifier
 ) {
@@ -45,8 +45,8 @@ fun ReadiumEpubScreen(
 
                         replace(
                             containerId,
-                            ReadiumEpubFragment(
-                                publication
+                            ReadiumEpubFragment.newInstance(
+                                uri
                             ),
                             tag
                         )
@@ -56,7 +56,8 @@ fun ReadiumEpubScreen(
     )
 
     DisposableEffect(
-        publication
+        activity,
+        containerId
     ) {
 
         onDispose {
@@ -67,11 +68,14 @@ fun ReadiumEpubScreen(
                 )
                 ?.let { fragment ->
 
-                    activity.supportFragmentManager
-                        .commit {
+                    if (!fragment.isRemoving) {
 
-                            remove(fragment)
-                        }
+                        activity.supportFragmentManager
+                            .commit {
+
+                                remove(fragment)
+                            }
+                    }
                 }
         }
     }
