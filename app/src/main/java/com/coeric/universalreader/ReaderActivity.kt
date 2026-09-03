@@ -110,7 +110,11 @@ private fun ReaderContent(
         format == DocumentFormat.EPUB -> {
 
             EpubReaderScreen(
-                uri = uri
+                uri = uri,
+                onBack = {
+                    (context as? ComponentActivity)
+                        ?.finish()
+                }
             )
         }
 
@@ -200,7 +204,8 @@ private fun RoutedDocumentContent(
 
             ReaderDocumentScreen(
                 document = document!!,
-                documentUri = uri.toString()
+                documentUri =
+                    uri.toString()
             )
         }
     }
@@ -263,7 +268,6 @@ private fun CbzReaderContent(
             ComicReaderScreen(
                 pages =
                     archive!!.pages,
-
                 documentUri =
                     uri.toString()
             )
@@ -328,7 +332,6 @@ private fun CbrReaderContent(
             ComicReaderScreen(
                 pages =
                     archive!!.pages,
-
                 documentUri =
                     uri.toString()
             )
@@ -342,7 +345,6 @@ private fun LoadingScreen() {
     Box(
         modifier =
             Modifier.fillMaxSize(),
-
         contentAlignment =
             Alignment.Center
     ) {
@@ -359,14 +361,12 @@ private fun ErrorScreen(
     Box(
         modifier =
             Modifier.fillMaxSize(),
-
         contentAlignment =
             Alignment.Center
     ) {
 
         Text(
             text = message,
-
             modifier =
                 Modifier.padding(
                     24.dp
