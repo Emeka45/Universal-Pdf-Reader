@@ -5,18 +5,24 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.text.selection.SelectionState
-import androidx.compose.foundation.text.selection.rememberSelectionState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -24,45 +30,100 @@ fun SelectableHighlightText(
     text: String,
     documentUri: String,
     chapterIndex: Int,
-    textStyle: androidx.compose.ui.text.TextStyle,
+    textStyle: TextStyle,
     onHighlightAdded: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+
     val context =
-        androidx.compose.ui.platform.LocalContext.current
+        LocalContext.current
 
-    val selectionState =
-        rememberSelectionState()
-
-    val selectedText =
-        selectionState.selectedTexts
-            .joinToString("") {
-                it.text
-            }
-            .trim()
+    var textFieldValue by remember(
+        text
+    ) {
+        mutableStateOf(
+            TextFieldValue(
+                text = text,
+                selection = TextRange.Zero
+            )
+        )
+    }
 
     var showHighlightDialog by remember {
         mutableStateOf(false)
     }
+
+    val selection =
+        textFieldValue.selection
+
+    val selectedText =
+        if (
+            selection.start !=
+                selection.end &&
+            selection.start >= 0 &&
+            selection.end <=
+                textFieldValue.text.length
+        ) {
+
+            val start =
+                minOf(
+                    selection.start,
+                    selection.end
+                )
+
+            val end =
+                maxOf(
+                    selection.start,
+                    selection.end
+                )
+
+            textFieldValue.text
+                .substring(
+                    start,
+                    end
+                )
+                .trim()
+
+        } else {
+            ""
+        }
 
     Column(
         modifier =
             modifier.fillMaxWidth()
     ) {
 
-        SelectionContainer(
-            state = selectionState
-        ) {
+        BasicTextField(
 
-            Text(
-                text = text,
+            value =
+                textFieldValue,
 
-                style = textStyle,
+            onValueChange = {
+                newValue ->
 
-                modifier =
-                    Modifier.fillMaxWidth()
-            )
-        }
+                textFieldValue =
+                    newValue.copy(
+                        text = text
+                    )
+            },
+
+            readOnly = true,
+
+            textStyle =
+                textStyle,
+
+            keyboardOptions =
+                KeyboardOptions.Default,
+
+            modifier =
+                Modifier.fillMaxWidth(),
+
+            decorationBox = {
+                innerTextField ->
+
+                innerTextField()
+            }
+        )
 
         if (
             selectedText.isNotBlank()
@@ -87,6 +148,7 @@ fun SelectableHighlightText(
                         showHighlightDialog = true
                     }
                 ) {
+
                     Text(
                         text =
                             "Highlight"
@@ -95,9 +157,15 @@ fun SelectableHighlightText(
 
                 OutlinedButton(
                     onClick = {
-                        selectionState.clear()
+
+                        textFieldValue =
+                            textFieldValue.copy(
+                                selection =
+                                    TextRange.Zero
+                            )
                     }
                 ) {
+
                     Text(
                         text =
                             "Clear Selection"
@@ -116,6 +184,7 @@ fun SelectableHighlightText(
                 selectedText,
 
             onDismiss = {
+
                 showHighlightDialog =
                     false
             },
@@ -143,7 +212,11 @@ fun SelectableHighlightText(
                 showHighlightDialog =
                     false
 
-                selectionState.clear()
+                textFieldValue =
+                    textFieldValue.copy(
+                        selection =
+                            TextRange.Zero
+                    )
 
                 onHighlightAdded()
             }
@@ -157,15 +230,18 @@ private fun HighlightNoteDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit
 ) {
+
     var note by remember {
         mutableStateOf("")
     }
 
-    androidx.compose.material3.AlertDialog(
+    AlertDialog(
+
         onDismissRequest =
             onDismiss,
 
         title = {
+
             Text(
                 text =
                     "Highlight Text"
@@ -173,6 +249,7 @@ private fun HighlightNoteDialog(
         },
 
         text = {
+
             Column(
                 verticalArrangement =
                     Arrangement.spacedBy(
@@ -185,7 +262,8 @@ private fun HighlightNoteDialog(
                         "\"$selectedText\""
                 )
 
-                androidx.compose.material3.TextField(
+                TextField(
+
                     value =
                         note,
 
@@ -194,6 +272,7 @@ private fun HighlightNoteDialog(
                     },
 
                     label = {
+
                         Text(
                             text =
                                 "Note (optional)"
@@ -207,11 +286,13 @@ private fun HighlightNoteDialog(
         },
 
         confirmButton = {
+
             Button(
                 onClick = {
                     onSave(note)
                 }
             ) {
+
                 Text(
                     text =
                         "Save Highlight"
@@ -220,10 +301,12 @@ private fun HighlightNoteDialog(
         },
 
         dismissButton = {
-            androidx.compose.material3.TextButton(
+
+            TextButton(
                 onClick =
                     onDismiss
             ) {
+
                 Text(
                     text =
                         "Cancel"
