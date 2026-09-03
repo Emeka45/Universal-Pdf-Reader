@@ -8,123 +8,105 @@ object DocumentSearch {
         maxResults: Int = 100
     ): List<SearchResult> {
 
-        val normalizedQuery =
+        val q =
             query.trim().lowercase()
 
-        if (
-            normalizedQuery.isBlank()
-        ) {
+        if (q.isBlank()) {
             return emptyList()
         }
 
         val results =
             mutableListOf<SearchResult>()
 
-        document.chapters.forEachIndexed {
-                index,
-                chapter ->
-
-            if (
-                results.size >= maxResults
-            ) {
-                return@forEachIndexed
-            }
-
-            val text =
-                chapter.content
-
-            val normalizedText =
-                text.lowercase()
-
-            var searchPosition = 0
-
-            while (
-                searchPosition <
-                    normalizedText.length
-            ) {
+        document.chapters
+            .forEachIndexed { index, chapter ->
 
                 if (
                     results.size >= maxResults
                 ) {
-                    break
+                    return@forEachIndexed
                 }
 
-                val matchIndex =
-                    normalizedText.indexOf(
-                        normalizedQuery,
-                        searchPosition
-                    )
+                val text =
+                    chapter.content
 
-                if (
-                    matchIndex < 0
+                val lower =
+                    text.lowercase()
+
+                var position = 0
+
+                while (
+                    position < lower.length &&
+                    results.size < maxResults
                 ) {
-                    break
-                }
 
-                val start =
-                    (
-                        matchIndex - 100
-                    ).coerceAtLeast(0)
+                    val found =
+                        lower.indexOf(
+                            q,
+                            position
+                        )
 
-                val end =
-                    (
-                        matchIndex +
-                            normalizedQuery.length +
-                            160
-                    ).coerceAtMost(
-                        text.length
-                    )
-
-                val prefix =
-                    if (
-                        start > 0
-                    ) {
-                        "…"
-                    } else {
-                        ""
+                    if (found < 0) {
+                        break
                     }
 
-                val suffix =
-                    if (
-                        end < text.length
-                    ) {
-                        "…"
-                    } else {
-                        ""
-                    }
+                    val start =
+                        (found - 100)
+                            .coerceAtLeast(0)
 
-                val snippet =
-                    prefix +
-                        text
-                            .substring(
+                    val end =
+                        (
+                            found +
+                                q.length +
+                                160
+                        ).coerceAtMost(
+                            text.length
+                        )
+
+                    val snippet =
+                        (
+                            if (start > 0) {
+                                "…"
+                            } else {
+                                ""
+                            }
+                        ) +
+                            text.substring(
                                 start,
                                 end
                             )
-                            .replace(
-                                Regex(
-                                    "\\s+"
-                                ),
-                                " "
+                                .replace(
+                                    Regex(
+                                        "\\s+"
+                                    ),
+                                    " "
+                                )
+                                .trim() +
+                            (
+                                if (
+                                    end < text.length
+                                ) {
+                                    "…"
+                                } else {
+                                    ""
+                                }
                             )
-                            .trim() +
-                        suffix
 
-                results.add(
-                    SearchResult(
-                        chapterIndex =
-                            index,
-                        chapterTitle =
-                            chapter.title,
-                        matchingText =
-                            snippet
+                    results.add(
+                        SearchResult(
+                            chapterIndex =
+                                index,
+                            chapterTitle =
+                                chapter.title,
+                            matchingText =
+                                snippet
+                        )
                     )
-                )
 
-                searchPosition =
-                    matchIndex +
-                        normalizedQuery.length
+                    position =
+                        found + q.length
+                }
             }
-        }
 
         return results
     }
