@@ -7,6 +7,7 @@ sealed class EpubContentBlock {
     ) : EpubContentBlock()
 
     data class Image(
-        val path: String
+        val path: String,
+        val altText: String? = null
     ) : EpubContentBlock()
 }
