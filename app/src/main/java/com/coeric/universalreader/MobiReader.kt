@@ -43,7 +43,7 @@ object MobiReader {
         val formatInfo =
             MobiFormatDetector.detect(
                 bytes,
-                mobiHeader
+                mobiHeader?.offset ?: -1
             )
 
         val title =
@@ -249,12 +249,12 @@ object MobiReader {
 
                     return MobiHeader(
                         offset = index,
-                        length =
-                            headerLength,
+                        length = headerLength,
                         type = type,
                         textEncoding =
                             textEncoding,
-                        uniqueId = uniqueId,
+                        uniqueId =
+                            uniqueId,
                         firstNonBookIndex =
                             firstNonBookIndex,
                         compression =
@@ -470,7 +470,6 @@ object MobiReader {
                     ReaderChapter(
                         title =
                             "Chapter $chapterNumber",
-
                         content =
                             chapterText
                     )
