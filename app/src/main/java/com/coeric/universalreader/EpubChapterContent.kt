@@ -181,8 +181,9 @@ fun EpubChapterContent(
                                             .bodySmall,
                                     modifier =
                                         Modifier.padding(
+                                            start = 16.dp,
                                             top = 4.dp,
-                                            horizontal = 16.dp
+                                            end = 16.dp
                                         )
                                 )
                             }
