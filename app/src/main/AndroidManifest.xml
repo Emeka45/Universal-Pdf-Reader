@@ -1,31 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application
+        android:name=".UniversalReaderApplication"
         android:allowBackup="true"
         android:label="Universal Reader"
         android:supportsRtl="true"
         android:theme="@style/Theme.UniversalReader">
 
         <activity
-            android:name=".MainActivity"
-            android:exported="true">
-
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-        </activity>
-
-        <activity
             android:name=".ReaderActivity"
             android:exported="true">
 
-            <!-- General VIEW handler -->
             <intent-filter>
-
                 <action
                     android:name="android.intent.action.VIEW" />
 
@@ -37,12 +26,9 @@
 
                 <data
                     android:scheme="content" />
-
             </intent-filter>
 
-            <!-- File URI handler -->
             <intent-filter>
-
                 <action
                     android:name="android.intent.action.VIEW" />
 
@@ -54,12 +40,9 @@
 
                 <data
                     android:scheme="file" />
-
             </intent-filter>
 
-            <!-- PDF -->
             <intent-filter>
-
                 <action
                     android:name="android.intent.action.VIEW" />
 
@@ -68,12 +51,9 @@
 
                 <data
                     android:mimeType="application/pdf" />
-
             </intent-filter>
 
-            <!-- EPUB -->
             <intent-filter>
-
                 <action
                     android:name="android.intent.action.VIEW" />
 
@@ -82,12 +62,9 @@
 
                 <data
                     android:mimeType="application/epub+zip" />
-
             </intent-filter>
 
-            <!-- MOBI -->
             <intent-filter>
-
                 <action
                     android:name="android.intent.action.VIEW" />
 
@@ -96,12 +73,9 @@
 
                 <data
                     android:mimeType="application/x-mobipocket-ebook" />
-
             </intent-filter>
 
-            <!-- Plain text -->
             <intent-filter>
-
                 <action
                     android:name="android.intent.action.VIEW" />
 
@@ -110,12 +84,9 @@
 
                 <data
                     android:mimeType="text/plain" />
-
             </intent-filter>
 
-            <!-- HTML -->
             <intent-filter>
-
                 <action
                     android:name="android.intent.action.VIEW" />
 
@@ -124,77 +95,20 @@
 
                 <data
                     android:mimeType="text/html" />
-
             </intent-filter>
 
-            <!-- RTF -->
-            <intent-filter>
+        </activity>
 
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+
+            <intent-filter>
                 <action
-                    android:name="android.intent.action.VIEW" />
+                    android:name="android.intent.action.MAIN" />
 
                 <category
-                    android:name="android.intent.category.DEFAULT" />
-
-                <data
-                    android:mimeType="application/rtf" />
-
-            </intent-filter>
-
-            <!-- Microsoft Word -->
-            <intent-filter>
-
-                <action
-                    android:name="android.intent.action.VIEW" />
-
-                <category
-                    android:name="android.intent.category.DEFAULT" />
-
-                <data
-                    android:mimeType="application/msword" />
-
-            </intent-filter>
-
-            <!-- DOCX -->
-            <intent-filter>
-
-                <action
-                    android:name="android.intent.action.VIEW" />
-
-                <category
-                    android:name="android.intent.category.DEFAULT" />
-
-                <data
-                    android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
-
-            </intent-filter>
-
-            <!-- ODT -->
-            <intent-filter>
-
-                <action
-                    android:name="android.intent.action.VIEW" />
-
-                <category
-                    android:name="android.intent.category.DEFAULT" />
-
-                <data
-                    android:mimeType="application/vnd.oasis.opendocument.text" />
-
-            </intent-filter>
-
-            <!-- Markdown -->
-            <intent-filter>
-
-                <action
-                    android:name="android.intent.action.VIEW" />
-
-                <category
-                    android:name="android.intent.category.DEFAULT" />
-
-                <data
-                    android:mimeType="text/markdown" />
-
+                    android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
         </activity>
