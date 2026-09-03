@@ -4,66 +4,109 @@ object EpubContentParser {
 
     private val imagePattern =
         Regex(
-            """(?is)<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["'][^>]*>"""
+            """(?is)<img\b([^>]*?)\bsrc\s*=\s*["']([^"']+)["']([^>]*)>"""
         )
 
-    private val blockImagePattern =
+    private val xhtmlImagePattern =
         Regex(
-            """(?is)<image\b[^>]*?\bxlink:href\s*=\s*["']([^"']+)["'][^>]*>"""
+            """(?is)<image\b([^>]*?)\bxlink:href\s*=\s*["']([^"']+)["']([^>]*)>"""
         )
 
     fun parse(
         html: String
     ): List<EpubContentBlock> {
 
-        if (
-            html.isBlank()
-        ) {
+        if (html.isBlank()) {
             return emptyList()
+        }
+
+        val matches =
+            mutableListOf<Pair<Int, EpubContentBlock>>()
+
+        imagePattern.findAll(html).forEach { match ->
+
+            val before =
+                match.groupValues.getOrNull(1)
+                    ?: ""
+
+            val src =
+                match.groupValues.getOrNull(2)
+                    ?.trim()
+
+            val after =
+                match.groupValues.getOrNull(3)
+                    ?: ""
+
+            if (!src.isNullOrBlank()) {
+
+                matches.add(
+                    match.range.first to
+                        EpubContentBlock.Image(
+                            path = src,
+                            altText =
+                                extractAlt(
+                                    before + after
+                                )
+                        )
+                )
+            }
+        }
+
+        xhtmlImagePattern.findAll(html).forEach { match ->
+
+            val before =
+                match.groupValues.getOrNull(1)
+                    ?: ""
+
+            val href =
+                match.groupValues.getOrNull(2)
+                    ?.trim()
+
+            val after =
+                match.groupValues.getOrNull(3)
+                    ?: ""
+
+            if (!href.isNullOrBlank()) {
+
+                matches.add(
+                    match.range.first to
+                        EpubContentBlock.Image(
+                            path = href,
+                            altText =
+                                extractAlt(
+                                    before + after
+                                )
+                        )
+                )
+            }
+        }
+
+        if (matches.isEmpty()) {
+            return listOf(
+                EpubContentBlock.Text(html)
+            )
+        }
+
+        matches.sortBy {
+            it.first
         }
 
         val blocks =
             mutableListOf<EpubContentBlock>()
 
-        val matches =
-            (
-                imagePattern.findAll(html) +
-                    blockImagePattern.findAll(html)
-            ).sortedBy {
-                it.range.first
-            }
+        var position = 0
 
-        if (
-            matches.isEmpty()
-        ) {
+        for ((start, block) in matches) {
 
-            return listOf(
-                EpubContentBlock.Text(
-                    html
-                )
-            )
-        }
-
-        var position =
-            0
-
-        for (
-            match in matches
-        ) {
-
-            if (
-                match.range.first > position
-            ) {
+            if (start > position) {
 
                 val text =
                     html.substring(
                         position,
-                        match.range.first
+                        start
                     )
 
-                if (
-                    text.isNotBlank()
-                ) {
+                if (text.isNotBlank()) {
 
                     blocks.add(
                         EpubContentBlock.Text(
@@ -73,39 +116,32 @@ object EpubContentParser {
                 }
             }
 
-            val imagePath =
-                match.groupValues
-                    .getOrNull(1)
-                    ?.trim()
+            blocks.add(block)
 
-            if (
-                !imagePath.isNullOrBlank()
-            ) {
+            val match =
+                when (block) {
+                    is EpubContentBlock.Image ->
+                        findImageEnd(
+                            html,
+                            start
+                        )
 
-                blocks.add(
-                    EpubContentBlock.Image(
-                        path =
-                            imagePath
-                    )
-                )
-            }
+                    is EpubContentBlock.Text ->
+                        start
+                }
 
             position =
-                match.range.last + 1
-        }
-
-        if (
-            position < html.length
-        ) {
-
-            val remaining =
-                html.substring(
+                match.coerceAtLeast(
                     position
                 )
+        }
 
-            if (
-                remaining.isNotBlank()
-            ) {
+        if (position < html.length) {
+
+            val remaining =
+                html.substring(position)
+
+            if (remaining.isNotBlank()) {
 
                 blocks.add(
                     EpubContentBlock.Text(
@@ -116,5 +152,39 @@ object EpubContentParser {
         }
 
         return blocks
+    }
+
+    private fun findImageEnd(
+        html: String,
+        start: Int
+    ): Int {
+
+        val end =
+            html.indexOf(
+                ">",
+                start
+            )
+
+        return if (end >= 0) {
+            end + 1
+        } else {
+            html.length
+        }
+    }
+
+    private fun extractAlt(
+        attributes: String
+    ): String? {
+
+        return Regex(
+            """(?is)\balt\s*=\s*["']([^"']*)["']"""
+        )
+            .find(attributes)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.takeIf {
+                it.isNotBlank()
+            }
     }
 }
