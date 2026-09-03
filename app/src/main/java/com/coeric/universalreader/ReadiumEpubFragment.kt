@@ -97,9 +97,11 @@ class ReadiumEpubFragment : Fragment(),
                             publication = publication,
                             configuration =
                                 EpubNavigatorFactory.Configuration(
+
                                     defaults =
                                         EpubDefaults(
-                                            scroll = true
+                                            scroll = true,
+                                            pageMargins = 1.2
                                         )
                                 )
                         )
