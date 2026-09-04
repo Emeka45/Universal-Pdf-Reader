@@ -10,7 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
@@ -31,11 +32,8 @@ import kotlinx.coroutines.withContext
 private data class PdfSearchHit(val page: Int, val snippet: String)
 
 @Composable
-fun PdfSearchDialog(
-    uri: Uri,
-    onDismiss: () -> Unit,
-    onOpenPage: (Int) -> Unit
-) {
+fun PdfSearchDialog(uri: Uri, onDismiss: () -> Unit, onOpenPage: (Int) -> Unit) {
+    val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<PdfSearchHit>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
@@ -44,32 +42,11 @@ fun PdfSearchDialog(
     LaunchedEffect(query, uri) {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) {
-            results = emptyList()
-            error = null
-            searching = false
+            results = emptyList(); error = null; searching = false
             return@LaunchedEffect
         }
-
         kotlinx.coroutines.delay(300)
-        searching = true
-        error = null
-        try {
-            results = withContext(Dispatchers.IO) {
-                PDFBoxResourceLoader.init(androidx.compose.ui.platform.LocalContext.current)
-                emptyList()
-            }
-        } catch (_: Exception) {
-            // Replaced below by the context-safe search implementation.
-        }
-    }
-
-    val context = androidx.compose.ui.platform.LocalContext.current
-    LaunchedEffect(query, uri) {
-        val trimmed = query.trim()
-        if (trimmed.isEmpty()) return@LaunchedEffect
-        kotlinx.coroutines.delay(300)
-        searching = true
-        error = null
+        searching = true; error = null
         try {
             val found = withContext(Dispatchers.IO) {
                 PDFBoxResourceLoader.init(context)
@@ -82,17 +59,12 @@ fun PdfSearchDialog(
                             stripper.startPage = page
                             stripper.endPage = page
                             val text = stripper.getText(document)
-                            if (text.lowercase().contains(needle)) {
-                                val normalized = text.replace(Regex("\\s+"), " ").trim()
-                                val index = normalized.lowercase().indexOf(needle)
+                            val normalized = text.replace(Regex("\\s+"), " ").trim()
+                            val index = normalized.lowercase().indexOf(needle)
+                            if (index >= 0) {
                                 val start = (index - 70).coerceAtLeast(0)
                                 val end = (index + trimmed.length + 120).coerceAtMost(normalized.length)
-                                val snippet = if (normalized.isNotEmpty() && index >= 0) {
-                                    normalized.substring(start, end)
-                                } else {
-                                    normalized.take(190)
-                                }
-                                hits += PdfSearchHit(page - 1, snippet)
+                                hits += PdfSearchHit(page - 1, normalized.substring(start, end))
                                 if (hits.size >= 100) break
                             }
                         }
@@ -102,8 +74,7 @@ fun PdfSearchDialog(
             }
             results = found
         } catch (e: Exception) {
-            results = emptyList()
-            error = e.message ?: "Unable to search PDF."
+            results = emptyList(); error = e.message ?: "Unable to search PDF."
         } finally {
             searching = false
         }
@@ -114,30 +85,16 @@ fun PdfSearchDialog(
         title = { Text("Search PDF") },
         text = {
             Column {
-                TextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    placeholder = { Text("Enter a word or phrase") }
-                )
+                TextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Enter a word or phrase") })
                 when {
-                    searching -> Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                        horizontalArrangement = Arrangement.Center
-                    ) { CircularProgressIndicator() }
+                    searching -> Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.Center) { CircularProgressIndicator() }
                     error != null -> Text(error!!, Modifier.padding(top = 16.dp))
                     query.isNotBlank() && results.isEmpty() -> Text("No results found.", Modifier.padding(top = 16.dp))
-                    else -> LazyColumn(modifier = Modifier.padding(top = 8.dp)) {
+                    else -> LazyColumn(Modifier.padding(top = 8.dp)) {
                         items(results) { hit ->
                             Column {
-                                TextButton(
-                                    onClick = { onOpenPage(hit.page) },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text("Page ${hit.page + 1}\n${hit.snippet}")
-                                }
-                                Divider()
+                                TextButton(onClick = { onOpenPage(hit.page) }, modifier = Modifier.fillMaxWidth()) { Text("Page ${hit.page + 1}\n${hit.snippet}") }
+                                HorizontalDivider()
                             }
                         }
                     }
