@@ -13,6 +13,7 @@ import org.readium.r2.navigator.epub.EpubDefaults
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.shared.publication.Publication
 
 class ReadiumEpubFragment :
     Fragment(),
@@ -99,9 +100,6 @@ class ReadiumEpubFragment :
                         return@onSuccess
                     }
 
-                    /*
-                     * Read the real EPUB table of contents.
-                     */
                     tocItems =
                         publication
                             .tableOfContents
@@ -210,11 +208,24 @@ class ReadiumEpubFragment :
     }
 
     /**
-     * Navigate directly to a TOC link.
+     * Returns the active Readium publication.
      *
-     * Readium's Navigator API accepts a Link,
-     * so we use the actual Link retained by
-     * ReadiumTocItem.
+     * The publication belongs to the navigator,
+     * so we obtain it from the navigator itself.
+     */
+    fun getPublication():
+        Publication? {
+
+        return (
+            childFragmentManager
+                .findFragmentByTag(
+                    NAVIGATOR_TAG
+                ) as? EpubNavigatorFragment
+            )?.publication
+    }
+
+    /**
+     * Navigate directly to a TOC link.
      */
     fun openTocItem(
         item: ReadiumTocItem
@@ -237,6 +248,33 @@ class ReadiumEpubFragment :
             exception: Exception
         ) {
             // Ignore invalid TOC targets.
+        }
+    }
+
+    /**
+     * Navigate directly to a Readium search result.
+     */
+    fun openSearchResult(
+        result: ReadiumEpubSearchResult
+    ) {
+
+        val navigator =
+            childFragmentManager
+                .findFragmentByTag(
+                    NAVIGATOR_TAG
+                ) as? EpubNavigatorFragment
+                ?: return
+
+        try {
+
+            navigator.go(
+                result.locator
+            )
+
+        } catch (
+            exception: Exception
+        ) {
+            // Ignore invalid search locations.
         }
     }
 
