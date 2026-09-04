@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -28,11 +30,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import kotlinx.coroutines.delay
 
 @Composable
@@ -144,7 +144,10 @@ fun PdfSearchPanel(
             horizontalArrangement =
                 Arrangement.spacedBy(
                     8.dp
-                )
+                ),
+
+            verticalAlignment =
+                androidx.compose.ui.Alignment.CenterVertically
         ) {
 
             OutlinedTextField(
@@ -171,6 +174,11 @@ fun PdfSearchPanel(
 
                         error =
                             null
+                    } else {
+
+                        // Trigger search on change
+                        searchQuery =
+                            it
                     }
                 },
 
@@ -201,6 +209,40 @@ fun PdfSearchPanel(
                         contentDescription =
                             "Search"
                     )
+                },
+
+                trailingIcon = {
+
+                    if (query.isNotEmpty()) {
+
+                        IconButton(
+                            onClick = {
+
+                                query = ""
+
+                                searchQuery =
+                                    ""
+
+                                results =
+                                    emptyList()
+
+                                error =
+                                    null
+                            },
+
+                            modifier =
+                                Modifier.padding(0.dp)
+                        ) {
+
+                            Icon(
+                                imageVector =
+                                    Icons.Default.Close,
+
+                                contentDescription =
+                                    "Clear search"
+                            )
+                        }
+                    }
                 },
 
                 keyboardOptions =
@@ -239,33 +281,6 @@ fun PdfSearchPanel(
                 Modifier.height(12.dp)
         )
 
-        /*
-         * Search button.
-         *
-         * This is deliberately separate from the text field
-         * so the user can explicitly start a search.
-         */
-        IconButton(
-
-            onClick = {
-
-                searchQuery =
-                    query.trim()
-            },
-
-            enabled =
-                query.isNotBlank()
-        ) {
-
-            Icon(
-                imageVector =
-                    Icons.Default.Search,
-
-                contentDescription =
-                    "Start search"
-            )
-        }
-
         when {
 
             searching -> {
@@ -279,10 +294,18 @@ fun PdfSearchPanel(
                     horizontalArrangement =
                         Arrangement.spacedBy(
                             12.dp
-                        )
+                        ),
+
+                    verticalAlignment =
+                        androidx.compose.ui.Alignment.CenterVertically
                 ) {
 
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(
+                        modifier =
+                            Modifier.padding(
+                                4.dp
+                            )
+                    )
 
                     Text(
                         text =
