@@ -46,7 +46,9 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -115,18 +117,19 @@ fun PdfReaderView(
         }
     }
 
-    /*
-     * One LaunchedEffect owns the renderer.
-     *
-     * This is important because PdfRenderer must not be closed
-     * while another coroutine is using it.
-     */
     LaunchedEffect(uri) {
 
-        var descriptor: ParcelFileDescriptor? = null
-        var renderer: PdfRenderer? = null
-        var temporaryFile: File? = null
-        var renderJob: Job? = null
+        var descriptor:
+            ParcelFileDescriptor? = null
+
+        var renderer:
+            PdfRenderer? = null
+
+        var temporaryFile:
+            File? = null
+
+        var renderJob:
+            Job? = null
 
         try {
 
@@ -158,7 +161,8 @@ fun PdfReaderView(
 
                                         input.copyTo(
                                             output,
-                                            bufferSize = 64 * 1024
+                                            bufferSize =
+                                                64 * 1024
                                         )
                                     }
                             }
@@ -205,15 +209,14 @@ fun PdfReaderView(
             }
 
             currentPage = 0
+
             resetZoom()
+
             loading = false
 
-            /*
-             * Watch currentPage using a simple polling loop.
-             *
-             * This avoids snapshotFlow entirely and gives us
-             * explicit control over cancellation.
-             */
+            var lastRenderedPage =
+                -1
+
             while (
                 currentCoroutineContext()
                     .isActive
@@ -222,126 +225,123 @@ fun PdfReaderView(
                 val requestedPage =
                     currentPage
 
-                renderJob?.cancel()
-
-                renderJob =
-                    launch {
-
-                        loading = true
-
-                        try {
-
-                            val renderedBitmap =
-                                withContext(
-                                    Dispatchers.IO
-                                ) {
-
-                                    val page =
-                                        pdf.openPage(
-                                            requestedPage
-                                        )
-
-                                    try {
-
-                                        val width =
-                                            (
-                                                page.width * 2f
-                                            ).toInt()
-
-                                        val height =
-                                            (
-                                                page.height * 2f
-                                            ).toInt()
-
-                                        val result =
-                                            Bitmap.createBitmap(
-                                                width,
-                                                height,
-                                                Bitmap.Config.ARGB_8888
-                                            )
-
-                                        page.render(
-                                            result,
-                                            null,
-                                            null,
-                                            PdfRenderer
-                                                .Page
-                                                .RENDER_MODE_FOR_DISPLAY
-                                        )
-
-                                        result
-
-                                    } finally {
-
-                                        page.close()
-                                    }
-                                }
-
-                            ensureActive()
-
-                            /*
-                             * Make sure the page hasn't changed
-                             * while rendering was taking place.
-                             */
-                            if (
-                                currentPage ==
-                                requestedPage
-                            ) {
-
-                                bitmap?.recycle()
-
-                                bitmap =
-                                    renderedBitmap
-
-                                resetZoom()
-                            } else {
-
-                                renderedBitmap.recycle()
-                            }
-
-                        } catch (
-                            exception: Exception
-                        ) {
-
-                            if (
-                                exception is
-                                    kotlinx.coroutines
-                                        .CancellationException
-                            ) {
-                                return@launch
-                            }
-
-                            error =
-                                exception.message
-                                    ?: "Unable to render PDF page."
-
-                        } finally {
-
-                            if (
-                                currentPage ==
-                                requestedPage
-                            ) {
-                                loading = false
-                            }
-                        }
-                    }
-
-                /*
-                 * Wait until currentPage changes.
-                 *
-                 * This is deliberately simple and reliable.
-                 */
-                var lastPage =
-                    requestedPage
-
-                while (
-                    currentPage ==
-                    lastPage
+                if (
+                    requestedPage !=
+                    lastRenderedPage
                 ) {
 
-                    kotlinx.coroutines
-                        .delay(40)
+                    renderJob?.cancel()
+
+                    renderJob =
+                        launch {
+
+                            loading = true
+
+                            try {
+
+                                val renderedBitmap =
+                                    withContext(
+                                        Dispatchers.IO
+                                    ) {
+
+                                        val page =
+                                            pdf.openPage(
+                                                requestedPage
+                                            )
+
+                                        try {
+
+                                            val width =
+                                                (
+                                                    page.width *
+                                                        2f
+                                                ).toInt()
+
+                                            val height =
+                                                (
+                                                    page.height *
+                                                        2f
+                                                ).toInt()
+
+                                            val result =
+                                                Bitmap.createBitmap(
+                                                    width,
+                                                    height,
+                                                    Bitmap.Config.ARGB_8888
+                                                )
+
+                                            page.render(
+                                                result,
+                                                null,
+                                                null,
+                                                PdfRenderer
+                                                    .Page
+                                                    .RENDER_MODE_FOR_DISPLAY
+                                            )
+
+                                            result
+
+                                        } finally {
+
+                                            page.close()
+                                        }
+                                    }
+
+                                ensureActive()
+
+                                if (
+                                    currentPage ==
+                                    requestedPage
+                                ) {
+
+                                    bitmap?.recycle()
+
+                                    bitmap =
+                                        renderedBitmap
+
+                                    lastRenderedPage =
+                                        requestedPage
+
+                                    resetZoom()
+
+                                } else {
+
+                                    renderedBitmap
+                                        .recycle()
+                                }
+
+                            } catch (
+                                exception: Exception
+                            ) {
+
+                                if (
+                                    exception is
+                                        kotlinx.coroutines
+                                            .CancellationException
+                                ) {
+
+                                    return@launch
+                                }
+
+                                error =
+                                    exception.message
+                                        ?: "Unable to render PDF page."
+
+                            } finally {
+
+                                if (
+                                    currentPage ==
+                                    requestedPage
+                                ) {
+
+                                    loading =
+                                        false
+                                }
+                            }
+                        }
                 }
+
+                delay(40)
             }
 
         } catch (
@@ -353,6 +353,7 @@ fun PdfReaderView(
                     kotlinx.coroutines
                         .CancellationException
             ) {
+
                 throw exception
             }
 
@@ -369,10 +370,6 @@ fun PdfReaderView(
 
             renderJob?.cancel()
 
-            /*
-             * Wait for the render job to stop before closing
-             * the renderer.
-             */
             try {
                 renderJob?.join()
             } catch (_: Exception) {
@@ -521,13 +518,18 @@ fun PdfReaderView(
                                                 )
 
                                             if (
-                                                newZoom <= 1f
+                                                newZoom <=
+                                                1f
                                             ) {
 
-                                                zoom = 1f
+                                                zoom =
+                                                    1f
 
-                                                offsetX = 0f
-                                                offsetY = 0f
+                                                offsetX =
+                                                    0f
+
+                                                offsetY =
+                                                    0f
 
                                             } else {
 
