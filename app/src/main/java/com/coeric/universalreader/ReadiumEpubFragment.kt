@@ -17,6 +17,7 @@ import org.readium.r2.navigator.preferences.TextAlign
 import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.util.AbsoluteUrl
 
 class ReadiumEpubFragment :
     Fragment(),
@@ -24,8 +25,12 @@ class ReadiumEpubFragment :
 
     private var navigatorContainerId: Int = 0
 
-    private var tocItems: List<ReadiumTocItem> =
+    private var tocItems:
+        List<ReadiumTocItem> =
         emptyList()
+
+    private var activePublication:
+        Publication? = null
 
     override fun onCreate(
         savedInstanceState: Bundle?
@@ -48,7 +53,8 @@ class ReadiumEpubFragment :
             requireContext()
         ).apply {
 
-            id = navigatorContainerId
+            id =
+                navigatorContainerId
 
             layoutParams =
                 ViewGroup.LayoutParams(
@@ -81,12 +87,16 @@ class ReadiumEpubFragment :
             arguments
                 ?.getString(ARG_URI)
 
-        if (uriString.isNullOrBlank()) {
+        if (
+            uriString.isNullOrBlank()
+        ) {
             return
         }
 
         val uri =
-            Uri.parse(uriString)
+            Uri.parse(
+                uriString
+            )
 
         viewLifecycleOwner
             .lifecycleScope
@@ -96,7 +106,8 @@ class ReadiumEpubFragment :
                     ReadiumEpubRepository.open(
                         context =
                             requireContext(),
-                        uri = uri
+                        uri =
+                            uri
                     )
 
                 result.onSuccess { publication ->
@@ -104,6 +115,9 @@ class ReadiumEpubFragment :
                     if (!isAdded) {
                         return@onSuccess
                     }
+
+                    activePublication =
+                        publication
 
                     tocItems =
                         publication
@@ -143,7 +157,6 @@ class ReadiumEpubFragment :
                             configuration =
                                 EpubNavigatorFactory
                                     .Configuration(
-
                                         defaults =
                                             EpubDefaults(
                                                 scroll = true,
@@ -206,7 +219,9 @@ class ReadiumEpubFragment :
             }
 
         val textAlign =
-            when (settings.textAlignment) {
+            when (
+                settings.textAlignment
+            ) {
 
                 ReaderTextAlignment.LEFT ->
                     TextAlign.START
@@ -218,20 +233,27 @@ class ReadiumEpubFragment :
         return EpubPreferences(
 
             fontSize =
-                settings.fontSize.toDouble(),
+                settings.fontSize
+                    .toDouble(),
 
             lineHeight =
-                settings.lineSpacing.toDouble(),
+                settings.lineSpacing
+                    .toDouble(),
 
-            pageMargins = 1.2,
+            pageMargins =
+                1.2,
 
-            scroll = true,
+            scroll =
+                true,
 
-            textAlign = textAlign,
+            textAlign =
+                textAlign,
 
-            theme = theme,
+            theme =
+                theme,
 
-            publisherStyles = false
+            publisherStyles =
+                false
         )
     }
 
@@ -262,12 +284,7 @@ class ReadiumEpubFragment :
     fun getPublication():
         Publication? {
 
-        return (
-            childFragmentManager
-                .findFragmentByTag(
-                    NAVIGATOR_TAG
-                ) as? EpubNavigatorFragment
-            )?.publication
+        return activePublication
     }
 
     fun getCurrentLocator():
@@ -330,6 +347,13 @@ class ReadiumEpubFragment :
         ) {
             // Ignore invalid search locations.
         }
+    }
+
+    override fun onExternalLinkActivated(
+        url: AbsoluteUrl
+    ) {
+        // External EPUB links are intentionally
+        // left inactive for now.
     }
 
     companion object {
