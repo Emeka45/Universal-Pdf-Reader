@@ -26,7 +26,12 @@ object ReadiumEpubSearch {
                 .search(
                     query = trimmedQuery,
                     options =
-                        SearchService.Options()
+                        SearchService.Options(
+                            caseSensitive = false,
+                            diacriticSensitive = false,
+                            wholeWord = false,
+                            exact = false
+                        )
                 )
                 ?: return emptyList()
 
@@ -35,19 +40,16 @@ object ReadiumEpubSearch {
 
         try {
 
-            iterator.forEach { collection ->
+            while (true) {
 
-                collection.forEach { locator ->
+                val collection =
+                    iterator.next()
+                        ?: break
+
+                collection.locators.forEach { locator ->
 
                     val title =
-                        locator
-                            .title
-                            ?: locator
-                                .text
-                                ?.highlight
-                                ?.takeIf {
-                                    it.isNotBlank()
-                                }
+                        locator.title
                             ?: "Search result"
 
                     results.add(
