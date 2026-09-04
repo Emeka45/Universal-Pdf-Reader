@@ -116,6 +116,10 @@ fun UniversalReaderHome() {
         )
     }
 
+    var filePickerError by remember {
+        mutableStateOf<String?>(null)
+    }
+
     val filePickerLauncher =
         rememberLauncherForActivityResult(
             contract =
@@ -125,6 +129,29 @@ fun UniversalReaderHome() {
             if (uri != null) {
 
                 try {
+
+                    val info =
+                        DocumentDetector.detect(
+                            context,
+                            uri
+                        )
+
+                    // Reject MP3 and MP4 files
+                    val extension = info.extension.lowercase()
+                    if (extension == "mp3" || extension == "mp4") {
+                        filePickerError =
+                            "Audio and video files (MP3, MP4) are not supported."
+                        return@rememberLauncherForActivityResult
+                    }
+
+                    // Check MIME type
+                    val mimeType = info.mimeType?.lowercase() ?: ""
+                    if (mimeType.startsWith("audio/") ||
+                        mimeType.startsWith("video/")) {
+                        filePickerError =
+                            "Audio and video files are not supported."
+                        return@rememberLauncherForActivityResult
+                    }
 
                     context.contentResolver
                         .takePersistableUriPermission(
@@ -749,6 +776,37 @@ fun UniversalReaderHome() {
             )
         }
 
+        if (filePickerError != null) {
+
+            AlertDialog(
+
+                onDismissRequest = {
+                    filePickerError = null
+                },
+
+                title = {
+                    Text("File Not Supported")
+                },
+
+                text = {
+                    Text(
+                        filePickerError ?: "This file type is not supported."
+                    )
+                },
+
+                confirmButton = {
+
+                    TextButton(
+                        onClick = {
+                            filePickerError = null
+                        }
+                    ) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
+
         if (showSearch) {
 
             AlertDialog(
@@ -1005,69 +1063,45 @@ private fun LibraryBookCard(
                 }
 
                 IconButton(
-                    onClick =
-                        onFavorite
+                    onClick = onFavorite
                 ) {
 
                     Icon(
                         imageVector =
-                            if (
-                                book.isFavorite
-                            ) {
+                            if (book.isFavorite) {
                                 Icons.Default.Favorite
                             } else {
                                 Icons.Default.FavoriteBorder
                             },
                         contentDescription =
-                            "Favorite"
+                            if (book.isFavorite) {
+                                "Remove from favorites"
+                            } else {
+                                "Add to favorites"
+                            }
                     )
                 }
 
                 IconButton(
-                    onClick =
-                        onDelete
+                    onClick = onDelete
                 ) {
 
                     Icon(
                         imageVector =
                             Icons.Default.Delete,
                         contentDescription =
-                            "Remove from library"
+                            "Delete"
                     )
                 }
-            }
-
-            Spacer(
-                modifier =
-                    Modifier.height(
-                        10.dp
-                    )
-            )
-
-            Button(
-                onClick = {
-
-                    openReader(
-                        context,
-                        book.uri
-                    )
-                },
-                modifier =
-                    Modifier.fillMaxWidth()
-            ) {
-
-                Text(
-                    "Open"
-                )
             }
         }
     }
 }
 
 @Composable
-fun QuickAccessCard(
+private fun QuickAccessCard(
     title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: androidx.compose.material.icons.Icons,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
@@ -1081,63 +1115,36 @@ fun QuickAccessCard(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(
-                        16.dp
-                    ),
+                    .padding(16.dp),
             horizontalAlignment =
-                Alignment.CenterHorizontally
+                Alignment.CenterHorizontally,
+            verticalArrangement =
+                Arrangement.Center
         ) {
 
-            IconButton(
-                onClick =
-                    onClick
-            ) {
-
-                Icon(
-                    imageVector =
-                        icon,
-                    contentDescription =
-                        title
-                )
-            }
-
-            Spacer(
+            Icon(
+                imageVector =
+                    icon,
+                contentDescription =
+                    title,
                 modifier =
-                    Modifier.height(
-                        4.dp
+                    Modifier.padding(
+                        8.dp
                     )
             )
 
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp)
+            )
+
             Text(
-                text =
-                    title,
+                text = title,
                 style =
                     MaterialTheme
                         .typography
-                        .titleMedium
+                        .titleSmall
             )
         }
     }
-}
-
-private fun openReader(
-    context: android.content.Context,
-    uri: String
-) {
-
-    val intent =
-        Intent(
-            context,
-            ReaderActivity::class.java
-        ).apply {
-
-            putExtra(
-                "uri",
-                uri
-            )
-        }
-
-    context.startActivity(
-        intent
-    )
 }
