@@ -4,11 +4,9 @@ import android.net.Uri
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
@@ -16,11 +14,10 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -32,8 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.FragmentActivity
@@ -41,6 +36,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import org.readium.r2.shared.publication.Locator
 
+@OptIn(
+    ExperimentalMaterial3Api::class
+)
 @Composable
 fun ReadiumEpubScreen(
     uri: Uri,
@@ -48,14 +46,16 @@ fun ReadiumEpubScreen(
     modifier: Modifier = Modifier
 ) {
 
-    val context = LocalContext.current
-
     var epubFragment by remember {
         mutableStateOf<ReadiumEpubFragment?>(null)
     }
 
     var publicationReady by remember {
         mutableStateOf(false)
+    }
+
+    var currentLocator by remember {
+        mutableStateOf<Locator?>(null)
     }
 
     var progress by remember {
@@ -78,52 +78,42 @@ fun ReadiumEpubScreen(
         mutableStateOf(false)
     }
 
-    var showBookmarks by remember {
-        mutableStateOf(false)
-    }
-
     var isBookmarked by remember {
         mutableStateOf(false)
     }
 
-    var currentLocator by remember {
-        mutableStateOf<Locator?>(null)
-    }
-
-    var error by remember {
-        mutableStateOf<String?>(null)
-    }
+    val context =
+        activity.applicationContext
 
     BackHandler {
 
-        if (showToc) {
-            showToc = false
-            return@BackHandler
-        }
+        when {
 
-        if (showSearch) {
-            showSearch = false
-            return@BackHandler
-        }
+            showToc -> {
+                showToc = false
+            }
 
-        if (showSettings) {
-            showSettings = false
-            return@BackHandler
-        }
+            showSearch -> {
+                showSearch = false
+            }
 
-        if (showBookmarks) {
-            showBookmarks = false
-            return@BackHandler
-        }
+            showSettings -> {
+                showSettings = false
+            }
 
-        activity.finish()
+            else -> {
+                activity.finish()
+            }
+        }
     }
 
     Box(
-        modifier = modifier.fillMaxSize()
+        modifier =
+            modifier.fillMaxSize()
     ) {
 
         AndroidView(
+
             modifier =
                 Modifier.fillMaxSize(),
 
@@ -144,33 +134,46 @@ fun ReadiumEpubScreen(
 
                     post {
 
-                        val fragment =
-                            ReadiumEpubFragment
-                                .newInstance(uri)
+                        if (
+                            epubFragment == null
+                        ) {
 
-                        epubFragment =
-                            fragment
+                            val fragment =
+                                ReadiumEpubFragment
+                                    .newInstance(
+                                        uri
+                                    )
 
-                        activity
-                            .supportFragmentManager
-                            .beginTransaction()
-                            .replace(
-                                id,
-                                fragment,
-                                "readium_epub_screen_fragment"
-                            )
-                            .commitNow()
+                            epubFragment =
+                                fragment
 
-                        publicationReady =
-                            true
+                            activity
+                                .supportFragmentManager
+                                .beginTransaction()
+                                .replace(
+                                    id,
+                                    fragment,
+                                    "readium_epub_screen_fragment"
+                                )
+                                .commitNow()
+
+                            publicationReady =
+                                true
+                        }
                     }
                 }
             }
         )
 
+        /*
+         * Monitor Readium's current locator.
+         *
+         * This does not intercept touch events.
+         * The Readium navigator remains the actual
+         * scrolling surface.
+         */
         LaunchedEffect(
-            epubFragment,
-            publicationReady
+            epubFragment
         ) {
 
             while (
@@ -195,35 +198,35 @@ fun ReadiumEpubScreen(
                         locator != null
                     ) {
 
-                        val value =
+                        val progression =
                             locator
                                 .locations
                                 .progression
-                                ?.toFloat()
 
                         if (
-                            value != null
+                            progression != null
                         ) {
 
                             progress =
-                                value
+                                progression
+                                    .toFloat()
                                     .coerceIn(
                                         0f,
                                         1f
                                     )
-
-                            ReadiumReadingPositionRepository
-                                .save(
-                                    context =
-                                        context,
-                                    documentUri =
-                                        uri.toString(),
-                                    locator =
-                                        locator
-                                )
                         }
 
-                        isBookmarked =
+                        ReadiumReadingPositionRepository
+                            .save(
+                                context =
+                                    context,
+                                documentUri =
+                                    uri.toString(),
+                                locator =
+                                    locator
+                            )
+
+                        val bookmarks =
                             ReadiumBookmarkRepository
                                 .getForDocument(
                                     context =
@@ -231,20 +234,26 @@ fun ReadiumEpubScreen(
                                     documentUri =
                                         uri.toString()
                                 )
-                                .any {
-                                    it.locator.href ==
-                                        locator.href &&
-                                        it.locator
-                                            .locations
-                                            .progression ==
-                                        locator.locations
-                                            .progression
-                                }
+
+                        isBookmarked =
+                            bookmarks.any {
+
+                                it.locator.href ==
+                                    locator.href &&
+                                    it.locator
+                                        .locations
+                                        .progression ==
+                                    locator
+                                        .locations
+                                        .progression
+                            }
                     }
 
                     if (
-                        fragment.getPublication() != null
+                        fragment
+                            .getPublication() != null
                     ) {
+
                         publicationReady =
                             true
                     }
@@ -254,8 +263,15 @@ fun ReadiumEpubScreen(
             }
         }
 
+        /*
+         * Controls.
+         *
+         * These occupy only the toolbar/progress
+         * areas and do not put a clickable layer over
+         * the EPUB reading surface.
+         */
         if (
-            error != null
+            controlsVisible
         ) {
 
             Surface(
@@ -265,44 +281,16 @@ fun ReadiumEpubScreen(
 
                 Box(
                     modifier =
-                        Modifier.fillMaxSize(),
-                    contentAlignment =
-                        Alignment.Center
-                ) {
-
-                    Text(
-                        text =
-                            error
-                                ?: "Unable to open EPUB."
-                    )
-                }
-            }
-        }
-
-        if (
-            controlsVisible
-        ) {
-
-            Surface(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(
-                            bottom = 4.dp
-                        ),
-                color =
-                    Color.Transparent
-            ) {
-
-                Box(
-                    modifier =
                         Modifier.fillMaxSize()
                 ) {
 
                     TopAppBar(
+
                         title = {
+
                             Text(
-                                text = "Universal Reader"
+                                text =
+                                    "Universal Reader"
                             )
                         },
 
@@ -341,7 +329,14 @@ fun ReadiumEpubScreen(
 
                             IconButton(
                                 onClick = {
-                                    showSearch = true
+
+                                    if (
+                                        epubFragment
+                                            ?.getPublication() != null
+                                    ) {
+                                        showSearch =
+                                            true
+                                    }
                                 }
                             ) {
 
@@ -369,6 +364,7 @@ fun ReadiumEpubScreen(
                                                     uri.toString()
                                             )
                                             .firstOrNull {
+
                                                 it.locator.href ==
                                                     locator.href &&
                                                     it.locator
@@ -398,18 +394,24 @@ fun ReadiumEpubScreen(
 
                                         ReadiumBookmarkRepository
                                             .add(
+
                                                 context =
                                                     context,
+
                                                 bookmark =
                                                     ReadiumBookmark(
+
                                                         id =
                                                             java.util.UUID
                                                                 .randomUUID()
                                                                 .toString(),
+
                                                         documentUri =
                                                             uri.toString(),
+
                                                         locator =
                                                             locator,
+
                                                         title =
                                                             "Bookmark"
                                                     )
@@ -438,21 +440,8 @@ fun ReadiumEpubScreen(
 
                             IconButton(
                                 onClick = {
-                                    showBookmarks = true
-                                }
-                            ) {
-
-                                Icon(
-                                    imageVector =
-                                        Icons.Default.Bookmark,
-                                    contentDescription =
-                                        "Bookmarks"
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    showSettings = true
+                                    showSettings =
+                                        true
                                 }
                             ) {
 
@@ -466,33 +455,27 @@ fun ReadiumEpubScreen(
                         }
                     )
 
-                    Box(
+                    LinearProgressIndicator(
+
+                        progress = {
+                            progress
+                        },
+
                         modifier =
                             Modifier
                                 .align(
                                     Alignment.BottomCenter
                                 )
                                 .fillMaxSize()
-                    ) {
-
-                        LinearProgressIndicator(
-                            progress = {
-                                progress
-                            },
-
-                            modifier =
-                                Modifier
-                                    .align(
-                                        Alignment.BottomCenter
-                                    )
-                                    .fillMaxSize()
-                                    .height(3.dp)
-                        )
-                    }
+                                .height(3.dp)
+                    )
                 }
             }
         }
 
+        /*
+         * Table of contents.
+         */
         if (
             showToc &&
             epubFragment != null
@@ -500,14 +483,11 @@ fun ReadiumEpubScreen(
 
             Surface(
                 modifier =
-                    Modifier.fillMaxSize(),
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .surface
+                    Modifier.fillMaxSize()
             ) {
 
                 ReadiumTocPanel(
+
                     items =
                         epubFragment
                             ?.getTableOfContents()
@@ -527,150 +507,131 @@ fun ReadiumEpubScreen(
             }
         }
 
+        /*
+         * EPUB search.
+         *
+         * The publication is checked before
+         * passing it to the search panel.
+         */
         if (
-            showSearch &&
-            epubFragment != null
+            showSearch
         ) {
 
-            ReadiumEpubSearchPanel(
-                publication =
-                    epubFragment
-                        ?.getPublication(),
+            val publication =
+                epubFragment
+                    ?.getPublication()
 
-                onResultSelected = { result ->
+            if (
+                publication != null
+            ) {
 
-                    epubFragment
-                        ?.openSearchResult(
-                            result
-                        )
+                Surface(
+                    modifier =
+                        Modifier.fillMaxSize()
+                ) {
 
-                    showSearch =
-                        false
-                },
+                    ReadiumEpubSearchPanel(
 
-                onDismiss = {
-                    showSearch = false
+                        publication =
+                            publication,
+
+                        onResultSelected = { result ->
+
+                            epubFragment
+                                ?.openSearchResult(
+                                    result
+                                )
+
+                            showSearch =
+                                false
+                        },
+
+                        onClose = {
+                            showSearch =
+                                false
+                        }
+                    )
                 }
-            )
+            }
         }
 
+        /*
+         * Reader settings.
+         */
         if (
             showSettings &&
             epubFragment != null
         ) {
 
-            ReaderSettingsPanel(
-                settings =
-                    ReaderSettingsRepository.get(
-                        context =
-                            context,
-                        documentUri =
-                            uri.toString()
-                    ),
-
-                onSettingsChanged = { settings ->
-
-                    ReaderSettingsRepository.save(
-                        context =
-                            context,
-                        documentUri =
-                            uri.toString(),
-                        settings =
-                            settings
-                    )
-
-                    epubFragment
-                        ?.applyReaderSettings(
-                            settings
-                        )
-                },
-
-                onDismiss = {
-                    showSettings = false
-                }
-            )
-        }
-
-        if (
-            showBookmarks
-        ) {
-
-            val bookmarks =
-                ReadiumBookmarkRepository
-                    .getForDocument(
-                        context =
-                            context,
-                        documentUri =
-                            uri.toString()
-                    )
+            val settings =
+                ReaderSettingsRepository.get(
+                    context =
+                        context,
+                    documentUri =
+                        uri.toString()
+                )
 
             Surface(
                 modifier =
-                    Modifier.fillMaxSize(),
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .surface
+                    Modifier.fillMaxSize()
             ) {
 
-                ReadiumBookmarkList(
-                    bookmarks =
-                        bookmarks,
+                ReaderSettingsPanel(
 
-                    onBookmarkSelected = { bookmark ->
+                    settings =
+                        settings,
 
-                        epubFragment
-                            ?.getPublication()
+                    onSettingsChanged = { newSettings ->
 
-                        epubFragment
-                            ?.openSearchResult(
-                                ReadiumEpubSearchResult(
-                                    locator =
-                                        bookmark.locator,
-                                    title =
-                                        bookmark.title
-                                )
-                            )
-
-                        showBookmarks =
-                            false
-                    },
-
-                    onDelete = { bookmark ->
-
-                        ReadiumBookmarkRepository
-                            .remove(
+                        ReaderSettingsRepository
+                            .save(
                                 context =
                                     context,
-                                bookmarkId =
-                                    bookmark.id
+                                documentUri =
+                                    uri.toString(),
+                                settings =
+                                    newSettings
+                            )
+
+                        epubFragment
+                            ?.applyReaderSettings(
+                                newSettings
                             )
                     },
 
-                    onDismiss = {
-                        showBookmarks = false
+                    onClose = {
+                        showSettings =
+                            false
                     }
                 )
             }
         }
 
+        /*
+         * Keep the variable referenced so the state
+         * remains available for future EPUB controls.
+         */
         if (
-            !publicationReady &&
-            error == null
+            !publicationReady
         ) {
 
-            Box(
+            Surface(
                 modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .background(
-                            Color.Transparent
-                        ),
-                contentAlignment =
-                    Alignment.Center
+                    Modifier.fillMaxSize()
             ) {
 
-                CircularProgressIndicator()
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize(),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Text(
+                        text =
+                            "Opening EPUB..."
+                    )
+                }
             }
         }
     }
