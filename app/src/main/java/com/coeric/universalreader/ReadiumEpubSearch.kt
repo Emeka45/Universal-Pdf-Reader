@@ -8,22 +8,29 @@ object ReadiumEpubSearch {
     suspend fun search(
         publication: Publication,
         query: String
-    ): List<ReadiumEpubSearchResult> {
+    ): Result<List<ReadiumEpubSearchResult>> {
 
         val trimmedQuery =
             query.trim()
 
         if (trimmedQuery.isEmpty()) {
-            return emptyList()
+            return Result.success(
+                emptyList()
+            )
         }
 
         if (!publication.isSearchable) {
-            return emptyList()
+            return Result.failure(
+                IllegalStateException(
+                    "This EPUB does not support text search."
+                )
+            )
         }
 
-        val iterator =
-            publication
-                .search(
+        return try {
+
+            val searchResult =
+                publication.search(
                     query = trimmedQuery,
                     options =
                         SearchService.Options(
@@ -33,39 +40,73 @@ object ReadiumEpubSearch {
                             exact = false
                         )
                 )
-                ?: return emptyList()
 
-        val results =
-            mutableListOf<ReadiumEpubSearchResult>()
-
-        try {
-
-            while (true) {
-
-                val collection =
-                    iterator.next()
-                        ?: break
-
-                collection.locators.forEach { locator ->
-
-                    val title =
-                        locator.title
-                            ?: "Search result"
-
-                    results.add(
-                        ReadiumEpubSearchResult(
-                            locator = locator,
-                            title = title
+            val iterator =
+                searchResult.getOrElse { error ->
+                    return Result.failure(
+                        IllegalStateException(
+                            error.toString()
                         )
                     )
                 }
+
+            val results =
+                mutableListOf<ReadiumEpubSearchResult>()
+
+            try {
+
+                while (true) {
+
+                    val pageResult =
+                        iterator.next()
+
+                    val collection =
+                        pageResult.getOrElse { error ->
+                            return Result.failure(
+                                IllegalStateException(
+                                    error.toString()
+                                )
+                            )
+                        }
+                            ?: break
+
+                    collection.locators.forEach { locator ->
+
+                        val title =
+                            locator.title
+                                ?: locator
+                                    .text
+                                    ?.highlight
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                ?: "Search result"
+
+                        results.add(
+                            ReadiumEpubSearchResult(
+                                locator = locator,
+                                title = title
+                            )
+                        )
+                    }
+                }
+
+                Result.success(
+                    results
+                )
+
+            } finally {
+
+                iterator.close()
             }
 
-        } finally {
+        } catch (
+            exception: Exception
+        ) {
 
-            iterator.close()
+            Result.failure(
+                exception
+            )
         }
-
-        return results
     }
 }
