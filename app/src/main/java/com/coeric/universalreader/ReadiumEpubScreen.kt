@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
 import org.readium.r2.shared.publication.Locator
+import java.util.UUID
 
 @androidx.compose.material3.ExperimentalMaterial3Api
 @androidx.compose.runtime.Composable
@@ -252,18 +253,18 @@ fun ReadiumEpubScreen(
                                 locator
                         )
 
-                    isBookmarked =
+                    // Check if bookmark exists in the list
+                    val bookmarks =
                         ReadiumBookmarkRepository
-                            .isBookmarked(
-                                context =
-                                    activity,
-
-                                documentUri =
-                                    uri.toString(),
-
-                                locator =
-                                    locator
+                            .getForDocument(
+                                context = activity,
+                                documentUri = uri.toString()
                             )
+
+                    isBookmarked =
+                        bookmarks.any { bookmark ->
+                            bookmark.locator.href == locator.href
+                        }
                 }
 
                 /*
@@ -396,20 +397,10 @@ fun ReadiumEpubScreen(
                      */
                     IconButton(
                         enabled =
-                            publicationReady &&
-                                epubFragment
-                                    ?.getPublication()
-                                    ?.isSearchable == true,
+                            publicationReady,
 
                         onClick = {
-
-                            if (
-                                epubFragment
-                                    ?.getPublication()
-                                    ?.isSearchable == true
-                            ) {
-                                showSearch = true
-                            }
+                            showSearch = true
                         }
                     ) {
 
@@ -439,15 +430,12 @@ fun ReadiumEpubScreen(
                             if (isBookmarked) {
 
                                 ReadiumBookmarkRepository
-                                    .removeBookmark(
+                                    .remove(
                                         context =
                                             activity,
 
-                                        documentUri =
-                                            uri.toString(),
-
-                                        locator =
-                                            locator
+                                        bookmarkId =
+                                            locator.href ?: UUID.randomUUID().toString()
                                     )
 
                                 isBookmarked =
@@ -456,15 +444,17 @@ fun ReadiumEpubScreen(
                             } else {
 
                                 ReadiumBookmarkRepository
-                                    .addBookmark(
+                                    .add(
                                         context =
                                             activity,
 
-                                        documentUri =
-                                            uri.toString(),
-
-                                        locator =
-                                            locator
+                                        bookmark =
+                                            ReadiumBookmark(
+                                                id = UUID.randomUUID().toString(),
+                                                documentUri = uri.toString(),
+                                                locator = locator,
+                                                title = "Bookmark"
+                                            )
                                     )
 
                                 isBookmarked =
@@ -583,10 +573,6 @@ fun ReadiumEpubScreen(
                     )
 
                     showToc = false
-                },
-
-                onClose = {
-                    showToc = false
                 }
             )
         }
@@ -645,10 +631,8 @@ fun ReadiumEpubScreen(
                     uri.toString()
             )
 
-        ReadiumReaderSettingsDialog(
-
-            settings =
-                settings,
+        ReaderSettingsDialog(
+            settings = settings,
 
             onSave = { newSettings ->
 
