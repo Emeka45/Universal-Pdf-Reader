@@ -29,7 +29,7 @@ object ReadiumEpubSearch {
 
         return try {
 
-            val searchResult =
+            val iterator =
                 publication.search(
                     query = trimmedQuery,
                     options =
@@ -40,15 +40,9 @@ object ReadiumEpubSearch {
                             exact = false
                         )
                 )
-
-            val iterator =
-                searchResult.getOrElse { error ->
-                    return Result.failure(
-                        IllegalStateException(
-                            error.toString()
-                        )
+                    ?: return Result.success(
+                        emptyList()
                     )
-                }
 
             val results =
                 mutableListOf<ReadiumEpubSearchResult>()
@@ -57,29 +51,29 @@ object ReadiumEpubSearch {
 
                 while (true) {
 
-                    val pageResult =
-                        iterator.next()
+                    val page =
+                        iterator
+                            .next()
+                            .getOrElse { error ->
 
-                    val collection =
-                        pageResult.getOrElse { error ->
-                            return Result.failure(
-                                IllegalStateException(
-                                    error.toString()
+                                return Result.failure(
+                                    IllegalStateException(
+                                        error.toString()
+                                    )
                                 )
-                            )
-                        }
+                            }
                             ?: break
 
-                    collection.locators.forEach { locator ->
+                    page.locators.forEach { locator ->
 
                         val title =
-                            locator.title
-                                ?: locator
-                                    .text
-                                    ?.highlight
-                                    ?.takeIf {
-                                        it.isNotBlank()
-                                    }
+                            locator
+                                .text
+                                ?.highlight
+                                ?.takeIf {
+                                    it.isNotBlank()
+                                }
+                                ?: locator.title
                                 ?: "Search result"
 
                         results.add(
