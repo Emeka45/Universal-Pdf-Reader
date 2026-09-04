@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -23,8 +24,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
@@ -47,6 +48,7 @@ import androidx.fragment.app.commit
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.shared.publication.Publication
 
 @Composable
 fun ReadiumEpubScreen(
@@ -72,6 +74,14 @@ fun ReadiumEpubScreen(
         mutableStateOf(
             emptyList<ReadiumTocItem>()
         )
+    }
+
+    var publication by remember {
+        mutableStateOf<Publication?>(null)
+    }
+
+    var showSearch by remember {
+        mutableStateOf(false)
     }
 
     val drawerState =
@@ -119,6 +129,10 @@ fun ReadiumEpubScreen(
         }
     )
 
+    /*
+     * Wait for the EPUB fragment to expose
+     * its table of contents and publication.
+     */
     LaunchedEffect(
         activity,
         uri
@@ -139,10 +153,23 @@ fun ReadiumEpubScreen(
                     readerFragment
                         .getTableOfContents()
 
-                if (items.isNotEmpty()) {
+                val epubPublication =
+                    readerFragment
+                        .getPublication()
+
+                if (
+                    items.isNotEmpty() ||
+                    epubPublication != null
+                ) {
 
                     tocItems = items
-                    break
+                    publication = epubPublication
+
+                    if (
+                        epubPublication != null
+                    ) {
+                        break
+                    }
                 }
             }
 
@@ -150,6 +177,9 @@ fun ReadiumEpubScreen(
         }
     }
 
+    /*
+     * Track the current EPUB reading progress.
+     */
     LaunchedEffect(
         activity,
         uri
@@ -198,18 +228,65 @@ fun ReadiumEpubScreen(
 
     BackHandler {
 
-        if (
-            drawerState.isOpen
-        ) {
+        when {
 
-            scope.launch {
-                drawerState.close()
+            showSearch -> {
+                showSearch = false
             }
 
-        } else {
+            drawerState.isOpen -> {
 
-            activity.finish()
+                scope.launch {
+                    drawerState.close()
+                }
+            }
+
+            else -> {
+                activity.finish()
+            }
         }
+    }
+
+    /*
+     * EPUB search overlay.
+     */
+    if (
+        showSearch &&
+        publication != null
+    ) {
+
+        ReadiumEpubSearchPanel(
+
+            publication =
+                publication!!,
+
+            onResultSelected = { result ->
+
+                val readerFragment =
+                    activity
+                        .supportFragmentManager
+                        .findFragmentByTag(
+                            "readium_epub_screen"
+                        ) as? ReadiumEpubFragment
+
+                readerFragment
+                    ?.openSearchResult(
+                        result
+                    )
+
+                showSearch = false
+                controlsVisible = false
+            },
+
+            onClose = {
+                showSearch = false
+            },
+
+            modifier =
+                modifier
+        )
+
+        return
     }
 
     ModalNavigationDrawer(
@@ -264,7 +341,9 @@ fun ReadiumEpubScreen(
                                     ) as? ReadiumEpubFragment
 
                             readerFragment
-                                ?.openTocItem(item)
+                                ?.openTocItem(
+                                    item
+                                )
 
                             scope.launch {
                                 drawerState.close()
@@ -361,15 +440,13 @@ fun ReadiumEpubScreen(
 
                         IconButton(
                             onClick = {
-                                // EPUB search connection next.
+                                showSearch = true
                             }
                         ) {
 
                             Icon(
                                 imageVector =
-                                    Icons
-                                        .Default
-                                        .Search,
+                                    Icons.Default.Search,
 
                                 contentDescription =
                                     "Search"
@@ -384,9 +461,7 @@ fun ReadiumEpubScreen(
 
                             Icon(
                                 imageVector =
-                                    Icons
-                                        .Default
-                                        .Settings,
+                                    Icons.Default.Settings,
 
                                 contentDescription =
                                     "Settings"
