@@ -3,11 +3,11 @@ package com.coeric.universalreader
 import android.content.Context
 import android.net.Uri
 import org.readium.r2.shared.publication.Publication
-import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
+import org.readium.r2.shared.util.toAbsoluteUrl
 
 object ReadiumEpubRepository {
 
@@ -30,23 +30,31 @@ object ReadiumEpubRepository {
                 )
 
             val url =
-                AbsoluteUrl(
-                    uri.toString()
+                uri.toAbsoluteUrl()
+                    ?: return Result.failure(
+                        IllegalArgumentException(
+                            "Unable to convert EPUB URI to an absolute URL."
+                        )
+                    )
+
+            val assetResult =
+                assetRetriever.retrieve(
+                    url
                 )
 
             val asset =
-                assetRetriever
-                    .retrieve(url)
-                    .fold(
-                        onSuccess = { it },
-                        onFailure = {
-                            return Result.failure(
-                                IllegalStateException(
-                                    it.toString()
-                                )
+                assetResult.fold(
+                    onSuccess = {
+                        it
+                    },
+                    onFailure = {
+                        return Result.failure(
+                            IllegalStateException(
+                                it.toString()
                             )
-                        }
-                    )
+                        )
+                    }
+                )
 
             val parser =
                 DefaultPublicationParser(
@@ -62,23 +70,24 @@ object ReadiumEpubRepository {
                         parser
                 )
 
-            opener
-                .open(
+            val publicationResult =
+                opener.open(
                     asset,
                     allowUserInteraction = true
                 )
-                .fold(
-                    onSuccess = {
-                        Result.success(it)
-                    },
-                    onFailure = {
-                        Result.failure(
-                            IllegalStateException(
-                                it.toString()
-                            )
+
+            publicationResult.fold(
+                onSuccess = {
+                    Result.success(it)
+                },
+                onFailure = {
+                    Result.failure(
+                        IllegalStateException(
+                            it.toString()
                         )
-                    }
-                )
+                    )
+                }
+            )
 
         } catch (
             exception: Exception
