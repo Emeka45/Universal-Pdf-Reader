@@ -1,10 +1,13 @@
 package com.coeric.universalreader
 
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,13 +28,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import kotlinx.coroutines.delay
 
 @Composable
 fun PdfSearchPanel(
-    uri: android.net.Uri,
+    uri: Uri,
     onClose: () -> Unit,
     onResultSelected: (Int) -> Unit
 ) {
@@ -40,6 +46,10 @@ fun PdfSearchPanel(
         LocalContext.current
 
     var query by remember {
+        mutableStateOf("")
+    }
+
+    var searchQuery by remember {
         mutableStateOf("")
     }
 
@@ -57,11 +67,15 @@ fun PdfSearchPanel(
         mutableStateOf<String?>(null)
     }
 
-    LaunchedEffect(query) {
+    /*
+     * Search after the user pauses typing.
+     */
+    LaunchedEffect(searchQuery) {
 
-        if (
-            query.trim().isEmpty()
-        ) {
+        val cleanQuery =
+            searchQuery.trim()
+
+        if (cleanQuery.isEmpty()) {
 
             results =
                 emptyList()
@@ -69,8 +83,13 @@ fun PdfSearchPanel(
             error =
                 null
 
+            searching =
+                false
+
             return@LaunchedEffect
         }
+
+        delay(350)
 
         searching =
             true
@@ -82,20 +101,26 @@ fun PdfSearchPanel(
 
             results =
                 PdfSearch.search(
-                    context,
-                    uri,
-                    query
+                    context =
+                        context,
+
+                    uri =
+                        uri,
+
+                    query =
+                        cleanQuery
                 )
 
-        } catch (
-            exception: Exception
-        ) {
+        } catch (exception: Exception) {
 
             results =
                 emptyList()
 
             error =
                 exception.message
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
                     ?: "PDF search failed."
 
         } finally {
@@ -123,19 +148,48 @@ fun PdfSearchPanel(
         ) {
 
             OutlinedTextField(
-                value = query,
+
+                value =
+                    query,
 
                 onValueChange = {
-                    query = it
+
+                    query =
+                        it
+
+                    /*
+                     * Empty query immediately clears
+                     * the results.
+                     */
+                    if (it.isBlank()) {
+
+                        searchQuery =
+                            ""
+
+                        results =
+                            emptyList()
+
+                        error =
+                            null
+                    }
                 },
 
                 modifier =
                     Modifier.weight(1f),
 
-                singleLine = true,
+                singleLine =
+                    true,
 
                 label = {
-                    Text("Search PDF")
+                    Text(
+                        "Search PDF"
+                    )
+                },
+
+                placeholder = {
+                    Text(
+                        "Enter a word or phrase"
+                    )
                 },
 
                 leadingIcon = {
@@ -147,11 +201,27 @@ fun PdfSearchPanel(
                         contentDescription =
                             "Search"
                     )
-                }
+                },
+
+                keyboardOptions =
+                    KeyboardOptions(
+                        imeAction =
+                            ImeAction.Search
+                    ),
+
+                keyboardActions =
+                    KeyboardActions(
+                        onSearch = {
+
+                            searchQuery =
+                                query.trim()
+                        }
+                    )
             )
 
             IconButton(
-                onClick = onClose
+                onClick =
+                    onClose
             ) {
 
                 Icon(
@@ -168,6 +238,33 @@ fun PdfSearchPanel(
             modifier =
                 Modifier.height(12.dp)
         )
+
+        /*
+         * Search button.
+         *
+         * This is deliberately separate from the text field
+         * so the user can explicitly start a search.
+         */
+        IconButton(
+
+            onClick = {
+
+                searchQuery =
+                    query.trim()
+            },
+
+            enabled =
+                query.isNotBlank()
+        ) {
+
+            Icon(
+                imageVector =
+                    Icons.Default.Search,
+
+                contentDescription =
+                    "Start search"
+            )
+        }
 
         when {
 
@@ -189,7 +286,7 @@ fun PdfSearchPanel(
 
                     Text(
                         text =
-                            "Searching..."
+                            "Searching PDF..."
                     )
                 }
             }
@@ -213,7 +310,7 @@ fun PdfSearchPanel(
                 )
             }
 
-            query.isNotBlank() &&
+            searchQuery.isNotBlank() &&
                 results.isEmpty() -> {
 
                 Text(
@@ -227,19 +324,50 @@ fun PdfSearchPanel(
                 )
             }
 
-            else -> {
+            results.isNotEmpty() -> {
 
-                LazyColumn {
+                Text(
+                    text =
+                        "${results.size} result${
+                            if (results.size == 1)
+                                ""
+                            else
+                                "s"
+                        }",
+
+                    style =
+                        MaterialTheme
+                            .typography
+                            .labelLarge,
+
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 4.dp
+                        )
+                )
+
+                LazyColumn(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                ) {
 
                     items(
-                        items = results
+                        items =
+                            results,
+
+                        key = {
+                            "${it.page}:${it.text.hashCode()}"
+                        }
                     ) { result ->
 
                         Column(
+
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
                                     .clickable {
+
                                         onResultSelected(
                                             result.page
                                         )
@@ -275,7 +403,13 @@ fun PdfSearchPanel(
                                 style =
                                     MaterialTheme
                                         .typography
-                                        .bodyMedium
+                                        .bodyMedium,
+
+                                maxLines =
+                                    4,
+
+                                overflow =
+                                    TextOverflow.Ellipsis
                             )
                         }
                     }
