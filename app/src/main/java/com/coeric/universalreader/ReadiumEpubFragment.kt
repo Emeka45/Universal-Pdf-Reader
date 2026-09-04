@@ -27,7 +27,9 @@ class ReadiumEpubFragment :
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
-        super.onCreate(savedInstanceState)
+        super.onCreate(
+            savedInstanceState
+        )
     }
 
     override fun onCreateView(
@@ -126,24 +128,10 @@ class ReadiumEpubFragment :
                             )
 
                     val preferences =
-                        EpubPreferences(
-
-                            fontSize =
+                        ReadiumEpubPreferences
+                            .fromReaderSettings(
                                 savedSettings
-                                    .fontSize
-                                    .toDouble(),
-
-                            lineHeight =
-                                savedSettings
-                                    .lineSpacing
-                                    .toDouble(),
-
-                            pageMargins = 1.2,
-
-                            scroll = true,
-
-                            publisherStyles = true
-                        )
+                            )
 
                     val navigatorFactory =
                         EpubNavigatorFactory(
@@ -199,6 +187,32 @@ class ReadiumEpubFragment :
     }
 
     /**
+     * Apply new reader settings directly
+     * to the active Readium navigator.
+     */
+    fun applyReaderSettings(
+        settings: ReaderSettings
+    ) {
+
+        val navigator =
+            childFragmentManager
+                .findFragmentByTag(
+                    NAVIGATOR_TAG
+                ) as? EpubNavigatorFragment
+                ?: return
+
+        val preferences =
+            ReadiumEpubPreferences
+                .fromReaderSettings(
+                    settings
+                )
+
+        navigator.submitPreferences(
+            preferences
+        )
+    }
+
+    /**
      * Returns the EPUB's real hierarchical TOC.
      */
     fun getTableOfContents():
@@ -209,9 +223,6 @@ class ReadiumEpubFragment :
 
     /**
      * Returns the active Readium publication.
-     *
-     * The publication belongs to the navigator,
-     * so we obtain it from the navigator itself.
      */
     fun getPublication():
         Publication? {
