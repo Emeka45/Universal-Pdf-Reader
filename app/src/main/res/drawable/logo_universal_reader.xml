@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <defs>
+        <linearGradient
+            id="gradientU"
+            x1="0%"
+            y1="0%"
+            x2="100%"
+            y2="100%">
+            <stop offset="0%" android:color="#2196F3" />
+            <stop offset="100%" android:color="#9C27B0" />
+        </linearGradient>
+    </defs>
+
+    <!-- Background circle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M100,10 C152.467,10 195,52.533 195,105 C195,157.467 152.467,200 100,200 C47.533,200 5,157.467 5,105 C5,52.533 47.533,10 100,10 Z" />
+
+    <!-- Bold gradient U -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#2196F3"
+        android:strokeWidth="24"
+        android:strokeLineCap="round"
+        android:pathData="M60,60 L60,130 Q60,160 90,160 L110,160 Q140,160 140,130 L140,60" />
+
+    <path
+        android:fillColor="#9C27B0"
+        android:pathData="M60,60 L60,130 Q60,160 90,160 L110,160 Q140,160 140,130 L140,60 Q140,40 120,40 L80,40 Q60,40 60,60 Z" />
+
+</vector>
