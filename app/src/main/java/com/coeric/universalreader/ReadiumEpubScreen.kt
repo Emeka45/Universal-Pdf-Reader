@@ -435,7 +435,7 @@ fun ReadiumEpubScreen(
                                             activity,
 
                                         bookmarkId =
-                                            locator.href ?: UUID.randomUUID().toString()
+                                            locator.href?.toString() ?: UUID.randomUUID().toString()
                                     )
 
                                 isBookmarked =
