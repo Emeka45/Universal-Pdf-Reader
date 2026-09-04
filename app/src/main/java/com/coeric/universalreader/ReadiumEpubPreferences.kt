@@ -1,8 +1,8 @@
 package com.coeric.universalreader
 
+import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.TextAlign
 import org.readium.r2.navigator.preferences.Theme
-import org.readium.r2.navigator.epub.EpubPreferences
 
 object ReadiumEpubPreferences {
 
@@ -12,7 +12,6 @@ object ReadiumEpubPreferences {
 
         val theme =
             when (settings.theme) {
-
                 ReaderTheme.LIGHT ->
                     Theme.LIGHT
 
@@ -25,7 +24,6 @@ object ReadiumEpubPreferences {
 
         val textAlign =
             when (settings.textAlignment) {
-
                 ReaderTextAlignment.LEFT ->
                     TextAlign.START
 
@@ -34,24 +32,19 @@ object ReadiumEpubPreferences {
             }
 
         return EpubPreferences(
-
             fontSize =
-                settings.fontSize
-                    .toDouble(),
+                settings.fontSize.toDouble(),
 
             lineHeight =
-                settings.lineSpacing
-                    .toDouble(),
+                settings.lineSpacing.toDouble(),
 
             pageMargins = 1.2,
 
             scroll = true,
 
-            textAlign =
-                textAlign,
+            textAlign = textAlign,
 
-            theme =
-                theme,
+            theme = theme,
 
             publisherStyles = false
         )
