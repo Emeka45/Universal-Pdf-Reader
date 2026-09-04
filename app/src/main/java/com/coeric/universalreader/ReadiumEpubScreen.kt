@@ -1,56 +1,45 @@
 package com.coeric.universalreader
 
 import android.net.Uri
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.FragmentActivity
-import androidx.fragment.app.commit
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import kotlinx.coroutines.isActive
 import org.readium.r2.shared.publication.Locator
-import org.readium.r2.shared.publication.Publication
 
 @Composable
 fun ReadiumEpubScreen(
@@ -59,34 +48,37 @@ fun ReadiumEpubScreen(
     modifier: Modifier = Modifier
 ) {
 
-    val containerId =
-        remember {
-            android.view.View.generateViewId()
-        }
+    val context = LocalContext.current
 
-    var progress by remember {
-        mutableFloatStateOf(0f)
+    var epubFragment by remember {
+        mutableStateOf<ReadiumEpubFragment?>(null)
     }
 
-    var currentLocator by remember {
-        mutableStateOf<Locator?>(null)
+    var publicationReady by remember {
+        mutableStateOf(false)
+    }
+
+    var progress by remember {
+        mutableStateOf(0f)
     }
 
     var controlsVisible by remember {
         mutableStateOf(true)
     }
 
-    var tocItems by remember {
-        mutableStateOf(
-            emptyList<ReadiumTocItem>()
-        )
-    }
-
-    var publication by remember {
-        mutableStateOf<Publication?>(null)
+    var showToc by remember {
+        mutableStateOf(false)
     }
 
     var showSearch by remember {
+        mutableStateOf(false)
+    }
+
+    var showSettings by remember {
+        mutableStateOf(false)
+    }
+
+    var showBookmarks by remember {
         mutableStateOf(false)
     }
 
@@ -94,520 +86,393 @@ fun ReadiumEpubScreen(
         mutableStateOf(false)
     }
 
-    val drawerState =
-        rememberDrawerState(
-            initialValue =
-                DrawerValue.Closed
-        )
-
-    val scope =
-        rememberCoroutineScope()
-
-    AndroidView(
-        modifier = modifier,
-
-        factory = { context ->
-
-            FrameLayout(context).apply {
-                id = containerId
-            }
-        },
-
-        update = {
-
-            val tag =
-                "readium_epub_screen"
-
-            if (
-                activity
-                    .supportFragmentManager
-                    .findFragmentByTag(tag) == null
-            ) {
-
-                activity
-                    .supportFragmentManager
-                    .commit {
-
-                        replace(
-                            containerId,
-                            ReadiumEpubFragment
-                                .newInstance(uri),
-                            tag
-                        )
-                    }
-            }
-        }
-    )
-
-    LaunchedEffect(
-        activity,
-        uri
-    ) {
-
-        while (true) {
-
-            val readerFragment =
-                activity
-                    .supportFragmentManager
-                    .findFragmentByTag(
-                        "readium_epub_screen"
-                    ) as? ReadiumEpubFragment
-
-            if (readerFragment != null) {
-
-                val items =
-                    readerFragment
-                        .getTableOfContents()
-
-                val epubPublication =
-                    readerFragment
-                        .getPublication()
-
-                if (
-                    items.isNotEmpty() ||
-                    epubPublication != null
-                ) {
-
-                    tocItems = items
-                    publication = epubPublication
-
-                    if (
-                        epubPublication != null
-                    ) {
-                        break
-                    }
-                }
-            }
-
-            delay(100)
-        }
+    var currentLocator by remember {
+        mutableStateOf<Locator?>(null)
     }
 
-    LaunchedEffect(
-        activity,
-        uri
-    ) {
-
-        while (true) {
-
-            val readerFragment =
-                activity
-                    .supportFragmentManager
-                    .findFragmentByTag(
-                        "readium_epub_screen"
-                    ) as? ReadiumEpubFragment
-
-            val navigator =
-                readerFragment
-                    ?.childFragmentManager
-                    ?.findFragmentByTag(
-                        "readium_epub_navigator"
-                    ) as? EpubNavigatorFragment
-
-            if (navigator != null) {
-
-                navigator
-                    .currentLocator
-                    .collect { locator ->
-
-                        currentLocator =
-                            locator
-
-                        progress =
-                            locator
-                                .locations
-                                .totalProgression
-                                ?.toFloat()
-                                ?.coerceIn(
-                                    0f,
-                                    1f
-                                )
-                                ?: 0f
-
-                        val bookmarks =
-                            ReadiumBookmarkRepository
-                                .getForDocument(
-                                    context =
-                                        activity,
-                                    documentUri =
-                                        uri.toString()
-                                )
-
-                        isBookmarked =
-                            bookmarks.any {
-                                it.locator
-                                    .href ==
-                                    locator.href &&
-                                it.locator
-                                    .locations
-                                    .progression ==
-                                    locator
-                                        .locations
-                                        .progression
-                            }
-                    }
-
-                break
-            }
-
-            delay(100)
-        }
+    var error by remember {
+        mutableStateOf<String?>(null)
     }
 
     BackHandler {
 
-        when {
-
-            showSearch -> {
-                showSearch = false
-            }
-
-            drawerState.isOpen -> {
-
-                scope.launch {
-                    drawerState.close()
-                }
-            }
-
-            else -> {
-                activity.finish()
-            }
+        if (showToc) {
+            showToc = false
+            return@BackHandler
         }
+
+        if (showSearch) {
+            showSearch = false
+            return@BackHandler
+        }
+
+        if (showSettings) {
+            showSettings = false
+            return@BackHandler
+        }
+
+        if (showBookmarks) {
+            showBookmarks = false
+            return@BackHandler
+        }
+
+        activity.finish()
     }
 
-    if (
-        showSearch &&
-        publication != null
+    Box(
+        modifier = modifier.fillMaxSize()
     ) {
 
-        ReadiumEpubSearchPanel(
-
-            publication =
-                publication!!,
-
-            onResultSelected = { result ->
-
-                val readerFragment =
-                    activity
-                        .supportFragmentManager
-                        .findFragmentByTag(
-                            "readium_epub_screen"
-                        ) as? ReadiumEpubFragment
-
-                readerFragment
-                    ?.openSearchResult(
-                        result
-                    )
-
-                showSearch = false
-                controlsVisible = false
-            },
-
-            onClose = {
-                showSearch = false
-            },
-
+        AndroidView(
             modifier =
-                modifier
+                Modifier.fillMaxSize(),
+
+            factory = { androidContext ->
+
+                FrameLayout(
+                    androidContext
+                ).apply {
+
+                    layoutParams =
+                        ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+
+                    id =
+                        android.view.View.generateViewId()
+
+                    post {
+
+                        val fragment =
+                            ReadiumEpubFragment
+                                .newInstance(uri)
+
+                        epubFragment =
+                            fragment
+
+                        activity
+                            .supportFragmentManager
+                            .beginTransaction()
+                            .replace(
+                                id,
+                                fragment,
+                                "readium_epub_screen_fragment"
+                            )
+                            .commitNow()
+
+                        publicationReady =
+                            true
+                    }
+                }
+            }
         )
 
-        return
-    }
-
-    ModalNavigationDrawer(
-
-        drawerState =
-            drawerState,
-
-        drawerContent = {
-
-            ModalDrawerSheet {
-
-                Text(
-                    text = "Contents",
-
-                    style =
-                        MaterialTheme
-                            .typography
-                            .headlineSmall,
-
-                    modifier =
-                        Modifier.padding(
-                            20.dp
-                        )
-                )
-
-                if (tocItems.isEmpty()) {
-
-                    Text(
-                        text =
-                            "No table of contents available.",
-
-                        modifier =
-                            Modifier.padding(
-                                20.dp
-                            )
-                    )
-
-                } else {
-
-                    ReadiumTocPanel(
-
-                        items =
-                            tocItems,
-
-                        onItemSelected = { item ->
-
-                            val readerFragment =
-                                activity
-                                    .supportFragmentManager
-                                    .findFragmentByTag(
-                                        "readium_epub_screen"
-                                    ) as? ReadiumEpubFragment
-
-                            readerFragment
-                                ?.openTocItem(
-                                    item
-                                )
-
-                            scope.launch {
-                                drawerState.close()
-                            }
-
-                            controlsVisible = false
-                        }
-                    )
-                }
-            }
-        }
-    ) {
-
-        Box(
-            modifier =
-                Modifier.fillMaxSize()
+        LaunchedEffect(
+            epubFragment,
+            publicationReady
         ) {
 
-            if (controlsVisible) {
+            while (
+                isActive
+            ) {
 
-                Surface(
-                    modifier =
-                        Modifier
-                            .align(
-                                Alignment.TopCenter
-                            )
-                            .fillMaxWidth(),
+                val fragment =
+                    epubFragment
 
-                    tonalElevation = 3.dp,
-
-                    shadowElevation = 4.dp
+                if (
+                    fragment != null
                 ) {
 
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    horizontal = 4.dp
-                                ),
+                    val locator =
+                        fragment
+                            .getCurrentLocator()
 
-                        verticalAlignment =
-                            Alignment.CenterVertically
+                    currentLocator =
+                        locator
+
+                    if (
+                        locator != null
                     ) {
 
-                        IconButton(
-                            onClick = {
-                                activity.finish()
-                            }
+                        val value =
+                            locator
+                                .locations
+                                .progression
+                                ?.toFloat()
+
+                        if (
+                            value != null
                         ) {
 
-                            Icon(
-                                imageVector =
-                                    Icons
-                                        .AutoMirrored
-                                        .Filled
-                                        .ArrowBack,
+                            progress =
+                                value
+                                    .coerceIn(
+                                        0f,
+                                        1f
+                                    )
 
-                                contentDescription =
-                                    "Back"
-                            )
-                        }
-
-                        Text(
-                            text = "Reading",
-
-                            modifier =
-                                Modifier.weight(
-                                    1f
-                                ),
-
-                            style =
-                                MaterialTheme
-                                    .typography
-                                    .titleMedium
-                        )
-
-                        IconButton(
-                            onClick = {
-
-                                val locator =
-                                    currentLocator
-                                        ?: return@IconButton
-
-                                val existing =
-                                    ReadiumBookmarkRepository
-                                        .getForDocument(
-                                            context =
-                                                activity,
-                                            documentUri =
-                                                uri.toString()
-                                        )
-                                        .firstOrNull {
-                                            it.locator
-                                                .href ==
-                                                locator.href &&
-                                            it.locator
-                                                .locations
-                                                .progression ==
-                                                locator
-                                                    .locations
-                                                    .progression
-                                        }
-
-                                if (existing != null) {
-
-                                    ReadiumBookmarkRepository
-                                        .remove(
-                                            context =
-                                                activity,
-                                            bookmarkId =
-                                                existing.id
-                                        )
-
-                                    isBookmarked = false
-
-                                } else {
-
-                                    val progression =
+                            ReadiumReadingPositionRepository
+                                .save(
+                                    context =
+                                        context,
+                                    documentUri =
+                                        uri.toString(),
+                                    locator =
                                         locator
+                                )
+                        }
+
+                        isBookmarked =
+                            ReadiumBookmarkRepository
+                                .getForDocument(
+                                    context =
+                                        context,
+                                    documentUri =
+                                        uri.toString()
+                                )
+                                .any {
+                                    it.locator.href ==
+                                        locator.href &&
+                                        it.locator
                                             .locations
-                                            .totalProgression
-                                            ?.let {
-                                                "${(it * 100).toInt()}%"
-                                            }
-                                            ?: "Current position"
-
-                                    val bookmark =
-                                        ReadiumBookmark(
-                                            id =
-                                                java.util.UUID
-                                                    .randomUUID()
-                                                    .toString(),
-
-                                            documentUri =
-                                                uri.toString(),
-
-                                            locator =
-                                                locator,
-
-                                            title =
-                                                "Bookmark • $progression"
-                                        )
-
-                                    ReadiumBookmarkRepository
-                                        .add(
-                                            context =
-                                                activity,
-                                            bookmark =
-                                                bookmark
-                                        )
-
-                                    isBookmarked = true
+                                            .progression ==
+                                        locator.locations
+                                            .progression
                                 }
-                            }
-                        ) {
+                    }
 
-                            Icon(
-                                imageVector =
-                                    if (isBookmarked) {
-                                        Icons.Default.Bookmark
-                                    } else {
-                                        Icons.Default.BookmarkBorder
-                                    },
-
-                                contentDescription =
-                                    if (isBookmarked) {
-                                        "Remove bookmark"
-                                    } else {
-                                        "Add bookmark"
-                                    }
-                            )
-                        }
-
-                        IconButton(
-                            onClick = {
-                                showSearch = true
-                            }
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.Default.Search,
-
-                                contentDescription =
-                                    "Search"
-                            )
-                        }
-
-                        IconButton(
-                            onClick = {
-                                // Reader settings connection next.
-                            }
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.Default.Settings,
-
-                                contentDescription =
-                                    "Settings"
-                            )
-                        }
-
-                        IconButton(
-                            onClick = {
-
-                                scope.launch {
-                                    drawerState.open()
-                                }
-                            }
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    Icons.Default.Menu,
-
-                                contentDescription =
-                                    "Table of contents"
-                            )
-                        }
+                    if (
+                        fragment.getPublication() != null
+                    ) {
+                        publicationReady =
+                            true
                     }
                 }
 
-                Surface(
-                    modifier =
-                        Modifier
-                            .align(
-                                Alignment.BottomCenter
-                            )
-                            .fillMaxWidth()
-                            .navigationBarsPadding(),
+                delay(500)
+            }
+        }
 
-                    tonalElevation = 3.dp
+        if (
+            error != null
+        ) {
+
+            Surface(
+                modifier =
+                    Modifier.fillMaxSize()
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize(),
+                    contentAlignment =
+                        Alignment.Center
                 ) {
 
-                    Column(
+                    Text(
+                        text =
+                            error
+                                ?: "Unable to open EPUB."
+                    )
+                }
+            }
+        }
+
+        if (
+            controlsVisible
+        ) {
+
+            Surface(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(
+                            bottom = 4.dp
+                        ),
+                color =
+                    Color.Transparent
+            ) {
+
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize()
+                ) {
+
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = "Universal Reader"
+                            )
+                        },
+
+                        navigationIcon = {
+
+                            IconButton(
+                                onClick = {
+                                    activity.finish()
+                                }
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Default.ArrowBack,
+                                    contentDescription =
+                                        "Back"
+                                )
+                            }
+                        },
+
+                        actions = {
+
+                            IconButton(
+                                onClick = {
+                                    showToc = true
+                                }
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Default.Menu,
+                                    contentDescription =
+                                        "Table of contents"
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    showSearch = true
+                                }
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Default.Search,
+                                    contentDescription =
+                                        "Search"
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+
+                                    val locator =
+                                        currentLocator
+                                            ?: return@IconButton
+
+                                    val existing =
+                                        ReadiumBookmarkRepository
+                                            .getForDocument(
+                                                context =
+                                                    context,
+                                                documentUri =
+                                                    uri.toString()
+                                            )
+                                            .firstOrNull {
+                                                it.locator.href ==
+                                                    locator.href &&
+                                                    it.locator
+                                                        .locations
+                                                        .progression ==
+                                                    locator
+                                                        .locations
+                                                        .progression
+                                            }
+
+                                    if (
+                                        existing != null
+                                    ) {
+
+                                        ReadiumBookmarkRepository
+                                            .remove(
+                                                context =
+                                                    context,
+                                                bookmarkId =
+                                                    existing.id
+                                            )
+
+                                        isBookmarked =
+                                            false
+
+                                    } else {
+
+                                        ReadiumBookmarkRepository
+                                            .add(
+                                                context =
+                                                    context,
+                                                bookmark =
+                                                    ReadiumBookmark(
+                                                        id =
+                                                            java.util.UUID
+                                                                .randomUUID()
+                                                                .toString(),
+                                                        documentUri =
+                                                            uri.toString(),
+                                                        locator =
+                                                            locator,
+                                                        title =
+                                                            "Bookmark"
+                                                    )
+                                            )
+
+                                        isBookmarked =
+                                            true
+                                    }
+                                }
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        if (
+                                            isBookmarked
+                                        ) {
+                                            Icons.Default.Bookmark
+                                        } else {
+                                            Icons.Default.BookmarkBorder
+                                        },
+
+                                    contentDescription =
+                                        "Bookmark"
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    showBookmarks = true
+                                }
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Default.Bookmark,
+                                    contentDescription =
+                                        "Bookmarks"
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    showSettings = true
+                                }
+                            ) {
+
+                                Icon(
+                                    imageVector =
+                                        Icons.Default.Settings,
+                                    contentDescription =
+                                        "Reader settings"
+                                )
+                            }
+                        }
+                    )
+
+                    Box(
                         modifier =
-                            Modifier.fillMaxWidth()
+                            Modifier
+                                .align(
+                                    Alignment.BottomCenter
+                                )
+                                .fillMaxSize()
                     ) {
 
                         LinearProgressIndicator(
@@ -616,78 +481,197 @@ fun ReadiumEpubScreen(
                             },
 
                             modifier =
-                                Modifier.fillMaxWidth()
-                        )
-
-                        Row(
-                            modifier =
                                 Modifier
-                                    .fillMaxWidth()
-                                    .padding(
-                                        horizontal = 12.dp,
-                                        vertical = 6.dp
-                                    ),
-
-                            horizontalArrangement =
-                                Arrangement.Center
-                        ) {
-
-                            Text(
-                                text =
-                                    "${(progress * 100).toInt()}%",
-
-                                style =
-                                    MaterialTheme
-                                        .typography
-                                        .labelMedium
-                            )
-                        }
+                                    .align(
+                                        Alignment.BottomCenter
+                                    )
+                                    .fillMaxSize()
+                                    .height(3.dp)
+                        )
                     }
                 }
             }
+        }
+
+        if (
+            showToc &&
+            epubFragment != null
+        ) {
+
+            Surface(
+                modifier =
+                    Modifier.fillMaxSize(),
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .surface
+            ) {
+
+                ReadiumTocPanel(
+                    items =
+                        epubFragment
+                            ?.getTableOfContents()
+                            ?: emptyList(),
+
+                    onItemSelected = { item ->
+
+                        epubFragment
+                            ?.openTocItem(
+                                item
+                            )
+
+                        showToc =
+                            false
+                    }
+                )
+            }
+        }
+
+        if (
+            showSearch &&
+            epubFragment != null
+        ) {
+
+            ReadiumEpubSearchPanel(
+                publication =
+                    epubFragment
+                        ?.getPublication(),
+
+                onResultSelected = { result ->
+
+                    epubFragment
+                        ?.openSearchResult(
+                            result
+                        )
+
+                    showSearch =
+                        false
+                },
+
+                onDismiss = {
+                    showSearch = false
+                }
+            )
+        }
+
+        if (
+            showSettings &&
+            epubFragment != null
+        ) {
+
+            ReaderSettingsPanel(
+                settings =
+                    ReaderSettingsRepository.get(
+                        context =
+                            context,
+                        documentUri =
+                            uri.toString()
+                    ),
+
+                onSettingsChanged = { settings ->
+
+                    ReaderSettingsRepository.save(
+                        context =
+                            context,
+                        documentUri =
+                            uri.toString(),
+                        settings =
+                            settings
+                    )
+
+                    epubFragment
+                        ?.applyReaderSettings(
+                            settings
+                        )
+                },
+
+                onDismiss = {
+                    showSettings = false
+                }
+            )
+        }
+
+        if (
+            showBookmarks
+        ) {
+
+            val bookmarks =
+                ReadiumBookmarkRepository
+                    .getForDocument(
+                        context =
+                            context,
+                        documentUri =
+                            uri.toString()
+                    )
+
+            Surface(
+                modifier =
+                    Modifier.fillMaxSize(),
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .surface
+            ) {
+
+                ReadiumBookmarkList(
+                    bookmarks =
+                        bookmarks,
+
+                    onBookmarkSelected = { bookmark ->
+
+                        epubFragment
+                            ?.getPublication()
+
+                        epubFragment
+                            ?.openSearchResult(
+                                ReadiumEpubSearchResult(
+                                    locator =
+                                        bookmark.locator,
+                                    title =
+                                        bookmark.title
+                                )
+                            )
+
+                        showBookmarks =
+                            false
+                    },
+
+                    onDelete = { bookmark ->
+
+                        ReadiumBookmarkRepository
+                            .remove(
+                                context =
+                                    context,
+                                bookmarkId =
+                                    bookmark.id
+                            )
+                    },
+
+                    onDismiss = {
+                        showBookmarks = false
+                    }
+                )
+            }
+        }
+
+        if (
+            !publicationReady &&
+            error == null
+        ) {
 
             Box(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .pointerInput(Unit) {
+                        .background(
+                            Color.Transparent
+                        ),
+                contentAlignment =
+                    Alignment.Center
+            ) {
 
-                            detectTapGestures(
-                                onTap = {
-
-                                    controlsVisible =
-                                        !controlsVisible
-                                }
-                            )
-                        }
-            )
-        }
-    }
-
-    DisposableEffect(
-        activity,
-        containerId
-    ) {
-
-        onDispose {
-
-            activity
-                .supportFragmentManager
-                .findFragmentByTag(
-                    "readium_epub_screen"
-                )
-                ?.let { fragment ->
-
-                    if (!fragment.isRemoving) {
-
-                        activity
-                            .supportFragmentManager
-                            .commit {
-
-                                remove(fragment)
-                            }
-                    }
-                }
+                CircularProgressIndicator()
+            }
         }
     }
 }
