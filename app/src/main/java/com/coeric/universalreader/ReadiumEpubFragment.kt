@@ -13,7 +13,6 @@ import org.readium.r2.navigator.epub.EpubDefaults
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
-import org.readium.r2.shared.publication.Link
 
 class ReadiumEpubFragment :
     Fragment(),
@@ -211,10 +210,11 @@ class ReadiumEpubFragment :
     }
 
     /**
-     * Navigate to a TOC item.
+     * Navigate directly to a TOC link.
      *
-     * The actual navigator navigation will be
-     * connected from the EPUB screen.
+     * Readium's Navigator API accepts a Link,
+     * so we use the actual Link retained by
+     * ReadiumTocItem.
      */
     fun openTocItem(
         item: ReadiumTocItem
@@ -227,29 +227,16 @@ class ReadiumEpubFragment :
                 ) as? EpubNavigatorFragment
                 ?: return
 
-        lifecycleScope.launch {
+        try {
 
-            try {
+            navigator.go(
+                item.link
+            )
 
-                val locator =
-                    navigator
-                        .publication
-                        .locatorFromLink(
-                            item.href
-                        )
-
-                if (locator != null) {
-
-                    navigator.go(
-                        locator
-                    )
-                }
-
-            } catch (
-                exception: Exception
-            ) {
-                // Ignore invalid TOC targets.
-            }
+        } catch (
+            exception: Exception
+        ) {
+            // Ignore invalid TOC targets.
         }
     }
 
