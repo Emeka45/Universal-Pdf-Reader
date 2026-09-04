@@ -13,6 +13,9 @@ import org.readium.r2.navigator.epub.EpubDefaults
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.navigator.preferences.TextAlign
+import org.readium.r2.navigator.preferences.Theme
+import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 
 class ReadiumEpubFragment :
@@ -127,11 +130,10 @@ class ReadiumEpubFragment :
                                     uri.toString()
                             )
 
-                    val preferences =
-                        ReadiumEpubPreferences
-                            .fromReaderSettings(
-                                savedSettings
-                            )
+                    val initialPreferences =
+                        createPreferences(
+                            savedSettings
+                        )
 
                     val navigatorFactory =
                         EpubNavigatorFactory(
@@ -159,7 +161,7 @@ class ReadiumEpubFragment :
                                     savedLocator,
 
                                 initialPreferences =
-                                    preferences,
+                                    initialPreferences,
 
                                 listener =
                                     this@ReadiumEpubFragment
@@ -186,10 +188,53 @@ class ReadiumEpubFragment :
             }
     }
 
-    /**
-     * Apply new reader settings directly
-     * to the active Readium navigator.
-     */
+    private fun createPreferences(
+        settings: ReaderSettings
+    ): EpubPreferences {
+
+        val theme =
+            when (settings.theme) {
+
+                ReaderTheme.LIGHT ->
+                    Theme.LIGHT
+
+                ReaderTheme.DARK ->
+                    Theme.DARK
+
+                ReaderTheme.SEPIA ->
+                    Theme.LIGHT
+            }
+
+        val textAlign =
+            when (settings.textAlignment) {
+
+                ReaderTextAlignment.LEFT ->
+                    TextAlign.START
+
+                ReaderTextAlignment.JUSTIFY ->
+                    TextAlign.JUSTIFY
+            }
+
+        return EpubPreferences(
+
+            fontSize =
+                settings.fontSize.toDouble(),
+
+            lineHeight =
+                settings.lineSpacing.toDouble(),
+
+            pageMargins = 1.2,
+
+            scroll = true,
+
+            textAlign = textAlign,
+
+            theme = theme,
+
+            publisherStyles = false
+        )
+    }
+
     fun applyReaderSettings(
         settings: ReaderSettings
     ) {
@@ -201,29 +246,19 @@ class ReadiumEpubFragment :
                 ) as? EpubNavigatorFragment
                 ?: return
 
-        val preferences =
-            ReadiumEpubPreferences
-                .fromReaderSettings(
-                    settings
-                )
-
         navigator.submitPreferences(
-            preferences
+            createPreferences(
+                settings
+            )
         )
     }
 
-    /**
-     * Returns the EPUB's real hierarchical TOC.
-     */
     fun getTableOfContents():
         List<ReadiumTocItem> {
 
         return tocItems
     }
 
-    /**
-     * Returns the active Readium publication.
-     */
     fun getPublication():
         Publication? {
 
@@ -235,9 +270,20 @@ class ReadiumEpubFragment :
             )?.publication
     }
 
-    /**
-     * Navigate directly to a TOC link.
-     */
+    fun getCurrentLocator():
+        Locator? {
+
+        val navigator =
+            childFragmentManager
+                .findFragmentByTag(
+                    NAVIGATOR_TAG
+                ) as? EpubNavigatorFragment
+
+        return navigator
+            ?.currentLocator
+            ?.value
+    }
+
     fun openTocItem(
         item: ReadiumTocItem
     ) {
@@ -262,9 +308,6 @@ class ReadiumEpubFragment :
         }
     }
 
-    /**
-     * Navigate directly to a Readium search result.
-     */
     fun openSearchResult(
         result: ReadiumEpubSearchResult
     ) {
