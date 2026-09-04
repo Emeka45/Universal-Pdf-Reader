@@ -40,7 +40,7 @@ object ReadiumEpubPreferences {
 
             pageMargins = 1.2,
 
-            scroll = true,
+            scroll =true,
 
             textAlign = textAlign,
 
