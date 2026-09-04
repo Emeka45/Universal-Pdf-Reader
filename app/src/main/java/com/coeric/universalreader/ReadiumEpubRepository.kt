@@ -2,12 +2,12 @@ package com.coeric.universalreader
 
 import android.content.Context
 import android.net.Uri
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
-import org.readium.r2.shared.util.toAbsoluteUrl
-import org.readium.r2.shared.publication.Publication
 
 object ReadiumEpubRepository {
 
@@ -23,29 +23,30 @@ object ReadiumEpubRepository {
 
             val assetRetriever =
                 AssetRetriever(
-                    context.contentResolver,
-                    httpClient
+                    contentResolver =
+                        context.contentResolver,
+                    httpClient =
+                        httpClient
                 )
 
             val url =
-                uri.toAbsoluteUrl()
-                    ?: return Result.failure(
-                        IllegalArgumentException(
-                            "Unable to convert EPUB URI to a Readium URL."
-                        )
-                    )
-
-            val assetResult =
-                assetRetriever.retrieve(url)
+                AbsoluteUrl(
+                    uri.toString()
+                )
 
             val asset =
-                assetResult.getOrElse {
-                    return Result.failure(
-                        IllegalStateException(
-                            it.toString()
-                        )
+                assetRetriever
+                    .retrieve(url)
+                    .fold(
+                        onSuccess = { it },
+                        onFailure = {
+                            return Result.failure(
+                                IllegalStateException(
+                                    it.toString()
+                                )
+                            )
+                        }
                     )
-                }
 
             val parser =
                 DefaultPublicationParser(
@@ -57,16 +58,15 @@ object ReadiumEpubRepository {
 
             val opener =
                 PublicationOpener(
-                    publicationParser = parser
+                    publicationParser =
+                        parser
                 )
 
-            val publicationResult =
-                opener.open(
+            opener
+                .open(
                     asset,
                     allowUserInteraction = true
                 )
-
-            publicationResult
                 .fold(
                     onSuccess = {
                         Result.success(it)
@@ -74,7 +74,7 @@ object ReadiumEpubRepository {
                     onFailure = {
                         Result.failure(
                             IllegalStateException(
-                               it.toString()
+                                it.toString()
                             )
                         )
                     }
