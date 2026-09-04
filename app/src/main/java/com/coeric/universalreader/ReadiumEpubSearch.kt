@@ -48,16 +48,26 @@ object ReadiumEpubSearch {
                         iterator.next()
 
                     val collection =
-                        searchResult.getOrElse {
-                            return Result.failure(
-                                IllegalStateException(
-                                    it.toString()
+                        searchResult.fold(
+                            onSuccess = {
+                                it
+                            },
+                            onFailure = {
+                                return Result.failure(
+                                    IllegalStateException(
+                                        it.toString()
+                                    )
                                 )
-                            )
-                        }
+                            }
+                        )
                             ?: break
 
-                    for (locator in collection.locators) {
+                    val locators =
+                        collection.locators
+
+                    for (
+                        locator in locators
+                    ) {
 
                         val title =
                             locator.title
@@ -71,8 +81,10 @@ object ReadiumEpubSearch {
 
                         results.add(
                             ReadiumEpubSearchResult(
-                                locator = locator,
-                                title = title
+                                locator =
+                                    locator,
+                                title =
+                                    title
                             )
                         )
                     }
