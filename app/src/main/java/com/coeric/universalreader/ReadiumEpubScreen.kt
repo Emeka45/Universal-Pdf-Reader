@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
@@ -48,6 +49,7 @@ import androidx.fragment.app.commit
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 
 @Composable
@@ -66,6 +68,10 @@ fun ReadiumEpubScreen(
         mutableFloatStateOf(0f)
     }
 
+    var currentLocator by remember {
+        mutableStateOf<Locator?>(null)
+    }
+
     var controlsVisible by remember {
         mutableStateOf(true)
     }
@@ -81,6 +87,10 @@ fun ReadiumEpubScreen(
     }
 
     var showSearch by remember {
+        mutableStateOf(false)
+    }
+
+    var isBookmarked by remember {
         mutableStateOf(false)
     }
 
@@ -129,10 +139,6 @@ fun ReadiumEpubScreen(
         }
     )
 
-    /*
-     * Wait for the EPUB fragment to expose
-     * its table of contents and publication.
-     */
     LaunchedEffect(
         activity,
         uri
@@ -177,9 +183,6 @@ fun ReadiumEpubScreen(
         }
     }
 
-    /*
-     * Track the current EPUB reading progress.
-     */
     LaunchedEffect(
         activity,
         uri
@@ -207,6 +210,9 @@ fun ReadiumEpubScreen(
                     .currentLocator
                     .collect { locator ->
 
+                        currentLocator =
+                            locator
+
                         progress =
                             locator
                                 .locations
@@ -217,6 +223,28 @@ fun ReadiumEpubScreen(
                                     1f
                                 )
                                 ?: 0f
+
+                        val bookmarks =
+                            ReadiumBookmarkRepository
+                                .getForDocument(
+                                    context =
+                                        activity,
+                                    documentUri =
+                                        uri.toString()
+                                )
+
+                        isBookmarked =
+                            bookmarks.any {
+                                it.locator
+                                    .href ==
+                                    locator.href &&
+                                it.locator
+                                    .locations
+                                    .progression ==
+                                    locator
+                                        .locations
+                                        .progression
+                            }
                     }
 
                 break
@@ -247,9 +275,6 @@ fun ReadiumEpubScreen(
         }
     }
 
-    /*
-     * EPUB search overlay.
-     */
     if (
         showSearch &&
         publication != null
@@ -423,18 +448,98 @@ fun ReadiumEpubScreen(
 
                         IconButton(
                             onClick = {
-                                // Bookmark connection next.
+
+                                val locator =
+                                    currentLocator
+                                        ?: return@IconButton
+
+                                val existing =
+                                    ReadiumBookmarkRepository
+                                        .getForDocument(
+                                            context =
+                                                activity,
+                                            documentUri =
+                                                uri.toString()
+                                        )
+                                        .firstOrNull {
+                                            it.locator
+                                                .href ==
+                                                locator.href &&
+                                            it.locator
+                                                .locations
+                                                .progression ==
+                                                locator
+                                                    .locations
+                                                    .progression
+                                        }
+
+                                if (existing != null) {
+
+                                    ReadiumBookmarkRepository
+                                        .remove(
+                                            context =
+                                                activity,
+                                            bookmarkId =
+                                                existing.id
+                                        )
+
+                                    isBookmarked = false
+
+                                } else {
+
+                                    val progression =
+                                        locator
+                                            .locations
+                                            .totalProgression
+                                            ?.let {
+                                                "${(it * 100).toInt()}%"
+                                            }
+                                            ?: "Current position"
+
+                                    val bookmark =
+                                        ReadiumBookmark(
+                                            id =
+                                                java.util.UUID
+                                                    .randomUUID()
+                                                    .toString(),
+
+                                            documentUri =
+                                                uri.toString(),
+
+                                            locator =
+                                                locator,
+
+                                            title =
+                                                "Bookmark • $progression"
+                                        )
+
+                                    ReadiumBookmarkRepository
+                                        .add(
+                                            context =
+                                                activity,
+                                            bookmark =
+                                                bookmark
+                                        )
+
+                                    isBookmarked = true
+                                }
                             }
                         ) {
 
                             Icon(
                                 imageVector =
-                                    Icons
-                                        .Default
-                                        .BookmarkBorder,
+                                    if (isBookmarked) {
+                                        Icons.Default.Bookmark
+                                    } else {
+                                        Icons.Default.BookmarkBorder
+                                    },
 
                                 contentDescription =
-                                    "Bookmark"
+                                    if (isBookmarked) {
+                                        "Remove bookmark"
+                                    } else {
+                                        "Add bookmark"
+                                    }
                             )
                         }
 
@@ -455,7 +560,7 @@ fun ReadiumEpubScreen(
 
                         IconButton(
                             onClick = {
-                                // Live settings connection next.
+                                // Reader settings connection next.
                             }
                         ) {
 
@@ -472,9 +577,7 @@ fun ReadiumEpubScreen(
                             onClick = {
 
                                 scope.launch {
-
-                                    drawerState
-                                        .open()
+                                    drawerState.open()
                                 }
                             }
                         ) {
