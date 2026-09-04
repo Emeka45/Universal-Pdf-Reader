@@ -74,7 +74,7 @@ object ReadiumEpubRepository {
                     onFailure = {
                         Result.failure(
                             IllegalStateException(
-                                it.toString()
+                               it.toString()
                             )
                         )
                     }
