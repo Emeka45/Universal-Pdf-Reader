@@ -73,6 +73,11 @@ object DocumentFormatDetector {
             "markdown" ->
                 DocumentFormat.MARKDOWN
 
+            // Reject audio and video formats
+            "mp3",
+            "mp4" ->
+                DocumentFormat.UNKNOWN
+
             else ->
                 detectFromMimeType(
                     info.mimeType
@@ -84,9 +89,15 @@ object DocumentFormatDetector {
         mimeType: String?
     ): DocumentFormat {
 
-        return when (
-            mimeType?.lowercase()
-        ) {
+        val lowerMime = mimeType?.lowercase() ?: return DocumentFormat.UNKNOWN
+
+        // Reject audio and video MIME types
+        if (lowerMime.startsWith("audio/") ||
+            lowerMime.startsWith("video/")) {
+            return DocumentFormat.UNKNOWN
+        }
+
+        return when (lowerMime) {
 
             "application/pdf" ->
                 DocumentFormat.PDF
