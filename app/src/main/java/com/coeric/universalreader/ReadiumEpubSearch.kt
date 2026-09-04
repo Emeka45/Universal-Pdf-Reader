@@ -2,6 +2,7 @@ package com.coeric.universalreader
 
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.search.SearchService
+import org.readium.r2.shared.publication.services.search.search
 
 object ReadiumEpubSearch {
 
@@ -16,14 +17,6 @@ object ReadiumEpubSearch {
         if (trimmedQuery.isEmpty()) {
             return Result.success(
                 emptyList()
-            )
-        }
-
-        if (!publication.isSearchable) {
-            return Result.failure(
-                IllegalStateException(
-                    "This EPUB does not support text search."
-                )
             )
         }
 
@@ -51,29 +44,29 @@ object ReadiumEpubSearch {
 
                 while (true) {
 
-                    val page =
-                        iterator
-                            .next()
-                            .getOrElse { error ->
+                    val searchResult =
+                        iterator.next()
 
-                                return Result.failure(
-                                    IllegalStateException(
-                                        error.toString()
-                                    )
+                    val collection =
+                        searchResult.getOrElse {
+                            return Result.failure(
+                                IllegalStateException(
+                                    it.toString()
                                 )
-                            }
+                            )
+                        }
                             ?: break
 
-                    page.locators.forEach { locator ->
+                    for (locator in collection.locators) {
 
                         val title =
-                            locator
-                                .text
-                                ?.highlight
-                                ?.takeIf {
-                                    it.isNotBlank()
-                                }
-                                ?: locator.title
+                            locator.title
+                                ?: locator
+                                    .text
+                                    ?.highlight
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
                                 ?: "Search result"
 
                         results.add(
