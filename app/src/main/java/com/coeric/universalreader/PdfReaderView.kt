@@ -124,11 +124,11 @@ fun PdfReaderView(uri: Uri) {
             Row(Modifier.fillMaxWidth().padding(4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 Text(if (pageCount > 0) "Page ${currentPage + 1} / $pageCount" else "PDF", style = MaterialTheme.typography.titleMedium)
                 Row {
-                    IconButton({ if (currentPage > 0) currentPage-- }, currentPage > 0) { Icon(Icons.Default.ArrowBack, "Previous page") }
-                    IconButton({ if (currentPage < pageCount - 1) currentPage++ }, currentPage < pageCount - 1) { Icon(Icons.Default.ArrowBack, "Next page", Modifier.graphicsLayer { rotationY = 180f }) }
-                    IconButton({ scale = (scale + 0.25f).coerceAtMost(4f) }) { Icon(Icons.Default.ZoomIn, "Zoom in") }
-                    IconButton({ scale = (scale - 0.25f).coerceAtLeast(1f); if (scale == 1f) { offsetX = 0f; offsetY = 0f } }) { Icon(Icons.Default.ZoomOut, "Zoom out") }
-                    IconButton({ showSearch = true }) { Icon(Icons.Default.Search, "Search PDF") }
+                    IconButton(onClick = { if (currentPage > 0) currentPage-- }, enabled = currentPage > 0) { Icon(Icons.Default.ArrowBack, "Previous page") }
+                    IconButton(onClick = { if (currentPage < pageCount - 1) currentPage++ }, enabled = currentPage < pageCount - 1) { Icon(Icons.Default.ArrowBack, "Next page", Modifier.graphicsLayer { rotationY = 180f }) }
+                    IconButton(onClick = { scale = (scale + 0.25f).coerceAtMost(4f) }) { Icon(Icons.Default.ZoomIn, "Zoom in") }
+                    IconButton(onClick = { scale = (scale - 0.25f).coerceAtLeast(1f); if (scale == 1f) { offsetX = 0f; offsetY = 0f } }) { Icon(Icons.Default.ZoomOut, "Zoom out") }
+                    IconButton(onClick = { showSearch = true }) { Icon(Icons.Default.Search, "Search PDF") }
                 }
             }
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).pointerInput(scale) {
