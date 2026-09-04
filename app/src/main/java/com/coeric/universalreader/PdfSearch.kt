@@ -6,8 +6,10 @@ import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 
 data class PdfSearchResult(
     val page: Int,
@@ -23,15 +25,14 @@ object PdfSearch {
     ): List<PdfSearchResult> =
         withContext(Dispatchers.IO) {
 
-            if (
-                query.isBlank()
-            ) {
+            val cleanQuery =
+                query.trim()
+
+            if (cleanQuery.isEmpty()) {
                 return@withContext emptyList()
             }
 
-            PDFBoxResourceLoader.init(
-                context
-            )
+            PDFBoxResourceLoader.init(context)
 
             val temporaryFile =
                 File.createTempFile(
@@ -57,96 +58,119 @@ object PdfSearch {
                             }
                     }
                     ?: throw IllegalArgumentException(
-                        "Unable to open PDF."
+                        "Unable to open the PDF."
                     )
 
-                PDDocument
-                    .load(temporaryFile)
-                    .use { document ->
+                PDDocument.load(
+                    temporaryFile
+                ).use { document ->
 
-                        val results =
-                            mutableListOf<PdfSearchResult>()
+                    val results =
+                        mutableListOf<PdfSearchResult>()
 
-                        val stripper =
-                            PDFTextStripper()
+                    val stripper =
+                        PDFTextStripper()
 
-                        val normalizedQuery =
-                            query
+                    val normalizedQuery =
+                        cleanQuery.lowercase(
+                            Locale.ROOT
+                        )
+
+                    /*
+                     * Search one page at a time.
+                     *
+                     * This gives us the exact page that
+                     * contains the result.
+                     */
+                    for (
+                        pageIndex in
+                        0 until document.numberOfPages
+                    ) {
+
+                        ensureActive()
+
+                        stripper.startPage =
+                            pageIndex + 1
+
+                        stripper.endPage =
+                            pageIndex + 1
+
+                        val pageText =
+                            stripper
+                                .getText(document)
                                 .trim()
-                                .lowercase()
 
-                        for (
-                            pageIndex in
-                            0 until document.numberOfPages
+                        if (pageText.isEmpty()) {
+                            continue
+                        }
+
+                        val normalizedPage =
+                            pageText.lowercase(
+                                Locale.ROOT
+                            )
+
+                        if (
+                            normalizedPage.contains(
+                                normalizedQuery
+                            )
                         ) {
 
-                            stripper.startPage =
-                                pageIndex + 1
+                            results +=
+                                PdfSearchResult(
 
-                            stripper.endPage =
-                                pageIndex + 1
+                                    page =
+                                        pageIndex,
 
-                            val pageText =
-                                stripper
-                                    .getText(document)
-                                    .trim()
-
-                            if (
-                                pageText
-                                    .lowercase()
-                                    .contains(
-                                        normalizedQuery
-                                    )
-                            ) {
-
-                                results.add(
-                                    PdfSearchResult(
-                                        page =
-                                            pageIndex,
-
-                                        text =
-                                            createSnippet(
-                                                pageText,
-                                                normalizedQuery
-                                            )
-                                    )
+                                    text =
+                                        createSnippet(
+                                            pageText,
+                                            normalizedPage,
+                                            normalizedQuery
+                                        )
                                 )
-                            }
 
+                            /*
+                             * Prevent an enormous result list.
+                             */
                             if (
-                                results.size >= 100
+                                results.size >= MAX_RESULTS
                             ) {
                                 break
                             }
                         }
-
-                        results
                     }
+
+                    results
+                }
 
             } finally {
 
-                temporaryFile.delete()
+                if (temporaryFile.exists()) {
+                    temporaryFile.delete()
+                }
             }
         }
 
     private fun createSnippet(
-        text: String,
-        query: String
+        originalText: String,
+        normalizedText: String,
+        normalizedQuery: String
     ): String {
 
-        val lower =
-            text.lowercase()
-
         val index =
-            lower.indexOf(query)
+            normalizedText.indexOf(
+                normalizedQuery
+            )
 
-        if (
-            index < 0
-        ) {
+        if (index < 0) {
 
-            return text
-                .take(240)
+            return originalText
+                .replace(
+                    Regex("\\s+"),
+                    " "
+                )
                 .trim()
+                .take(MAX_SNIPPET_LENGTH)
         }
 
         val start =
@@ -154,10 +178,13 @@ object PdfSearch {
                 .coerceAtLeast(0)
 
         val end =
-            (index + query.length + 140)
-                .coerceAtMost(
-                    text.length
-                )
+            (
+                index +
+                    normalizedQuery.length +
+                    140
+            ).coerceAtMost(
+                originalText.length
+            )
 
         val prefix =
             if (start > 0) {
@@ -167,22 +194,28 @@ object PdfSearch {
             }
 
         val suffix =
-            if (end < text.length) {
+            if (end < originalText.length) {
                 "…"
             } else {
                 ""
             }
 
-        return prefix +
-            text.substring(
-                start,
-                end
-            ).replace(
-                Regex(
-                    "\\s+"
-                ),
+        return (
+            prefix +
+                originalText.substring(
+                    start,
+                    end
+                ) +
+                suffix
+            )
+            .replace(
+                Regex("\\s+"),
                 " "
-            ).trim() +
-            suffix
+            )
+            .trim()
     }
+
+    private const val MAX_RESULTS = 100
+
+    private const val MAX_SNIPPET_LENGTH = 300
 }
