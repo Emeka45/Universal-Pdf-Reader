@@ -26,15 +26,12 @@ class ReadiumEpubFragment :
 
     private var navigatorContainerId: Int = 0
 
-    private var tocItems:
-        List<ReadiumTocItem> =
+    private var activePublication: Publication? = null
+
+    private var tocItems: List<ReadiumTocItem> =
         emptyList()
 
-    private var activePublication:
-        Publication? = null
-
-    private var openError:
-        String? = null
+    private var openError: String? = null
 
     override fun onCreate(
         savedInstanceState: Bundle?
@@ -98,6 +95,8 @@ class ReadiumEpubFragment :
             openError =
                 "No EPUB file was provided."
 
+            showError()
+
             return
         }
 
@@ -106,19 +105,30 @@ class ReadiumEpubFragment :
                 uriString
             )
 
+        openPublication(
+            uri
+        )
+    }
+
+    private fun openPublication(
+        uri: Uri
+    ) {
+
         viewLifecycleOwner
             .lifecycleScope
             .launch {
 
                 try {
 
-                    val context =
-                        requireContext()
+                    Log.d(
+                        TAG,
+                        "Opening EPUB: $uri"
+                    )
 
                     val result =
                         ReadiumEpubRepository.open(
                             context =
-                                context,
+                                requireContext(),
                             uri =
                                 uri
                         )
@@ -130,16 +140,15 @@ class ReadiumEpubFragment :
 
                             if (
                                 !isAdded ||
-                                viewLifecycleOwner
-                                    .lifecycle
-                                    .currentState
-                                    .isAtLeast(
-                                        androidx.lifecycle.Lifecycle.State.CREATED
-                                    )
-                                    .not()
+                                view == null
                             ) {
                                 return@fold
                             }
+
+                            Log.d(
+                                TAG,
+                                "EPUB opened successfully."
+                            )
 
                             activePublication =
                                 publication
@@ -155,7 +164,7 @@ class ReadiumEpubFragment :
                                 ReadiumReadingPositionRepository
                                     .get(
                                         context =
-                                            context,
+                                            requireContext(),
                                         documentUri =
                                             uri.toString()
                                     )
@@ -164,12 +173,12 @@ class ReadiumEpubFragment :
                                 ReaderSettingsRepository
                                     .get(
                                         context =
-                                            context,
+                                            requireContext(),
                                         documentUri =
                                             uri.toString()
                                     )
 
-                            val initialPreferences =
+                            val preferences =
                                 createPreferences(
                                     savedSettings
                                 )
@@ -192,8 +201,7 @@ class ReadiumEpubFragment :
                                             )
                                 )
 
-                            childFragmentManager
-                                .fragmentFactory =
+                            val fragmentFactory =
                                 navigatorFactory
                                     .createFragmentFactory(
 
@@ -201,17 +209,32 @@ class ReadiumEpubFragment :
                                             savedLocator,
 
                                         initialPreferences =
-                                            initialPreferences,
+                                            preferences,
 
                                         listener =
                                             this@ReadiumEpubFragment
                                     )
 
-                            if (
+                            /*
+                             * IMPORTANT:
+                             *
+                             * The factory is installed BEFORE
+                             * EpubNavigatorFragment is created.
+                             */
+                            childFragmentManager
+                                .fragmentFactory =
+                                fragmentFactory
+
+                            val existingNavigator =
                                 childFragmentManager
                                     .findFragmentByTag(
                                         NAVIGATOR_TAG
-                                    ) == null
+                                    )
+
+                            if (
+                                existingNavigator == null &&
+                                !childFragmentManager
+                                    .isStateSaved
                             ) {
 
                                 childFragmentManager
@@ -224,6 +247,7 @@ class ReadiumEpubFragment :
                                     )
                                     .commitNow()
                             }
+
                         },
 
                         onFailure = {
@@ -231,13 +255,18 @@ class ReadiumEpubFragment :
 
                             openError =
                                 exception.message
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
                                     ?: exception.toString()
 
                             Log.e(
                                 TAG,
-                                "Failed to open EPUB.",
+                                "EPUB opening failed.",
                                 exception
                             )
+
+                            showError()
                         }
                     )
 
@@ -247,15 +276,75 @@ class ReadiumEpubFragment :
 
                     openError =
                         exception.message
+                            ?.takeIf {
+                                it.isNotBlank()
+                            }
                             ?: exception.toString()
 
                     Log.e(
                         TAG,
-                        "Unexpected EPUB opening error.",
+                        "Unexpected EPUB error.",
                         exception
                     )
+
+                    showError()
                 }
             }
+    }
+
+    private fun showError() {
+
+        val container =
+            view as? ViewGroup
+                ?: return
+
+        container.removeAllViews()
+
+        val errorView =
+            android.widget.TextView(
+                requireContext()
+            ).apply {
+
+                text =
+                    buildString {
+
+                        append(
+                            "Unable to open EPUB"
+                        )
+
+                        append(
+                            "\n\n"
+                        )
+
+                        append(
+                            openError
+                                ?: "Unknown EPUB error."
+                        )
+                    }
+
+                textSize =
+                    16f
+
+                setPadding(
+                    40,
+                    40,
+                    40,
+                    40
+                )
+
+                gravity =
+                    android.view.Gravity.CENTER
+
+                layoutParams =
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+            }
+
+        container.addView(
+            errorView
+        )
     }
 
     private fun createPreferences(
@@ -346,6 +435,12 @@ class ReadiumEpubFragment :
         return activePublication
     }
 
+    fun getOpenError():
+        String? {
+
+        return openError
+    }
+
     fun getCurrentLocator():
         Locator? {
 
@@ -358,12 +453,6 @@ class ReadiumEpubFragment :
         return navigator
             ?.currentLocator
             ?.value
-    }
-
-    fun getOpenError():
-        String? {
-
-        return openError
     }
 
     fun openTocItem(
@@ -380,7 +469,8 @@ class ReadiumEpubFragment :
         try {
 
             navigator.go(
-                item.link
+                item.link,
+                animated = true
             )
 
         } catch (
@@ -409,7 +499,8 @@ class ReadiumEpubFragment :
         try {
 
             navigator.go(
-                result.locator
+                result.locator,
+                animated = true
             )
 
         } catch (
@@ -427,7 +518,11 @@ class ReadiumEpubFragment :
     override fun onExternalLinkActivated(
         url: AbsoluteUrl
     ) {
-        // External EPUB links remain disabled for now.
+
+        Log.d(
+            TAG,
+            "External EPUB link blocked: $url"
+        )
     }
 
     companion object {
