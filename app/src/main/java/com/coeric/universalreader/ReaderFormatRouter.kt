@@ -111,10 +111,37 @@ object ReaderFormatRouter {
                     "EPUB uses the EPUB reader."
                 )
 
-            DocumentFormat.UNKNOWN ->
-                throw UnsupportedOperationException(
-                    "This document format is not supported."
+            DocumentFormat.UNKNOWN -> {
+
+                val info =
+                    DocumentDetector.detect(
+                        context,
+                        uri
+                    )
+
+                // Check if it's an audio or video file
+                val extension = info.extension.lowercase()
+                if (extension == "mp3" || extension == "mp4") {
+                    throw UnsupportedOperationException(
+                        "Audio and video files (MP3, MP4) are not supported."
+                    )
+                }
+
+                // Check MIME type for audio/video
+                val mimeType = info.mimeType?.lowercase() ?: ""
+                if (mimeType.startsWith("audio/") ||
+                    mimeType.startsWith("video/")) {
+                    throw UnsupportedOperationException(
+                        "Audio and video files are not supported."
+                    )
+                }
+
+                // Treat all other unknown formats as text
+                TxtReader.open(
+                    context,
+                    uri
                 )
+            }
         }
     }
 }
