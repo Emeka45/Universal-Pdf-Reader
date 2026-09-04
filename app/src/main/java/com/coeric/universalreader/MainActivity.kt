@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -232,13 +233,11 @@ private fun LibraryBookCard(book: LibraryBook, context: android.content.Context,
 
 @Composable
 private fun QuickAccessCard(title: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Card(modifier = modifier) {
-        androidx.compose.foundation.clickable(onClick = onClick).let { clickModifier ->
-            Column(Modifier.fillMaxWidth().then(clickModifier).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                Icon(icon, title, Modifier.padding(8.dp))
-                Spacer(Modifier.height(8.dp))
-                Text(title, style = MaterialTheme.typography.titleSmall)
-            }
+    Card(modifier = modifier.clickable(onClick = onClick)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(icon, title, Modifier.padding(8.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(title, style = MaterialTheme.typography.titleSmall)
         }
     }
 }
