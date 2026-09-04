@@ -4,9 +4,11 @@ import android.net.Uri
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
@@ -14,16 +16,17 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,23 +34,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import org.readium.r2.shared.publication.Locator
 
-@OptIn(
-    ExperimentalMaterial3Api::class
-)
-@Composable
+@androidx.compose.material3.ExperimentalMaterial3Api
+@androidx.compose.runtime.Composable
 fun ReadiumEpubScreen(
     uri: Uri,
-    activity: FragmentActivity,
+    activity: androidx.fragment.app.FragmentActivity,
     modifier: Modifier = Modifier
 ) {
-
-    val context =
-        activity.applicationContext
 
     var epubFragment by remember {
         mutableStateOf<ReadiumEpubFragment?>(null)
@@ -62,7 +58,7 @@ fun ReadiumEpubScreen(
     }
 
     var progress by remember {
-        mutableStateOf(0f)
+        mutableFloatStateOf(0f)
     }
 
     var controlsVisible by remember {
@@ -84,6 +80,16 @@ fun ReadiumEpubScreen(
     var isBookmarked by remember {
         mutableStateOf(false)
     }
+
+    var openError by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * BACK BUTTON
+     * ---------------------------------------------------------
+     */
 
     BackHandler {
 
@@ -107,182 +113,240 @@ fun ReadiumEpubScreen(
         }
     }
 
-    Box(
+    /*
+     * ---------------------------------------------------------
+     * READIUM HOST
+     *
+     * AndroidView only provides the container.
+     * ReadiumEpubFragment owns the actual navigator.
+     * ---------------------------------------------------------
+     */
+
+    AndroidView(
         modifier =
-            modifier.fillMaxSize()
-    ) {
+            modifier.fillMaxSize(),
 
-        /*
-         * READIUM NAVIGATOR
-         *
-         * This is the actual reading surface.
-         * No full-screen clickable Compose layer is
-         * placed over it.
-         */
-        AndroidView(
+        factory = { context ->
 
-            modifier =
-                Modifier.fillMaxSize(),
+            FrameLayout(context).apply {
 
-            factory = { androidContext ->
+                id =
+                    android.view.View.generateViewId()
 
-                FrameLayout(
-                    androidContext
-                ).apply {
+                layoutParams =
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
 
-                    layoutParams =
-                        ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
+                post {
+
+                    if (
+                        activity.isFinishing ||
+                        activity.isDestroyed
+                    ) {
+                        return@post
+                    }
+
+                    val existing =
+                        activity.supportFragmentManager
+                            .findFragmentByTag(
+                                READIUM_FRAGMENT_TAG
+                            ) as? ReadiumEpubFragment
+
+                    if (existing != null) {
+
+                        epubFragment =
+                            existing
+
+                        return@post
+                    }
+
+                    val fragment =
+                        ReadiumEpubFragment.newInstance(
+                            uri
                         )
 
-                    id =
-                        android.view.View.generateViewId()
+                    epubFragment =
+                        fragment
 
-                    post {
-
-                        if (
-                            epubFragment == null
-                        ) {
-
-                            val fragment =
-                                ReadiumEpubFragment
-                                    .newInstance(
-                                        uri
-                                    )
-
-                            epubFragment =
-                                fragment
-
-                            activity
-                                .supportFragmentManager
-                                .beginTransaction()
-                                .replace(
-                                    id,
-                                    fragment,
-                                    "readium_epub_screen_fragment"
-                                )
-                                .commitNow()
-
-                            publicationReady =
-                                true
-                        }
-                    }
+                    activity.supportFragmentManager
+                        .beginTransaction()
+                        .replace(
+                            id,
+                            fragment,
+                            READIUM_FRAGMENT_TAG
+                        )
+                        .commit()
                 }
             }
-        )
+        },
 
-        /*
-         * Monitor the Readium navigator.
-         *
-         * This saves the current Locator and updates
-         * the progress indicator without touching or
-         * intercepting the reading surface.
-         */
-        LaunchedEffect(
+        update = {
+            /*
+             * Nothing here.
+             *
+             * The Readium fragment owns its lifecycle.
+             */
+        }
+    )
+
+    /*
+     * ---------------------------------------------------------
+     * WAIT FOR THE REAL READIUM PUBLICATION
+     * ---------------------------------------------------------
+     */
+
+    LaunchedEffect(epubFragment) {
+
+        val fragment =
             epubFragment
-        ) {
+                ?: return@LaunchedEffect
 
-            while (
-                isActive
+        while (true) {
+
+            if (
+                !activity.isFinishing &&
+                !activity.isDestroyed
             ) {
 
-                val fragment =
-                    epubFragment
+                val publication =
+                    fragment.getPublication()
 
-                if (
-                    fragment != null
-                ) {
+                val ready =
+                    fragment.isReady()
 
-                    val locator =
-                        fragment
-                            .getCurrentLocator()
+                publicationReady =
+                    ready
+
+                openError =
+                    fragment.getOpenError()
+
+                val locator =
+                    fragment.getCurrentLocator()
+
+                if (locator != null) {
 
                     currentLocator =
                         locator
 
-                    if (
-                        locator != null
-                    ) {
+                    progress =
+                        locator.locations
+                            .totalProgression
+                            ?.toFloat()
+                            ?.coerceIn(
+                                0f,
+                                1f
+                            )
+                            ?: 0f
 
-                        val progression =
-                            locator
-                                .locations
-                                .progression
+                    ReadiumReadingPositionRepository
+                        .save(
+                            context =
+                                activity,
 
-                        if (
-                            progression != null
-                        ) {
+                            documentUri =
+                                uri.toString(),
 
-                            progress =
-                                progression
-                                    .toFloat()
-                                    .coerceIn(
-                                        0f,
-                                        1f
-                                    )
-                        }
+                            locator =
+                                locator
+                        )
 
-                        ReadiumReadingPositionRepository
-                            .save(
+                    isBookmarked =
+                        ReadiumBookmarkRepository
+                            .isBookmarked(
                                 context =
-                                    context,
+                                    activity,
+
                                 documentUri =
                                     uri.toString(),
+
                                 locator =
                                     locator
                             )
-
-                        val bookmarks =
-                            ReadiumBookmarkRepository
-                                .getForDocument(
-                                    context =
-                                        context,
-                                    documentUri =
-                                        uri.toString()
-                                )
-
-                        isBookmarked =
-                            bookmarks.any {
-
-                                it.locator.href ==
-                                    locator.href &&
-                                    it.locator
-                                        .locations
-                                        .progression ==
-                                    locator
-                                        .locations
-                                        .progression
-                            }
-                    }
-
-                    publicationReady =
-                        fragment
-                            .getPublication() != null
                 }
 
-                delay(500)
+                /*
+                 * Publication being non-null means the EPUB
+                 * was successfully opened.
+                 */
+                if (publication != null) {
+                    publicationReady =
+                        ready
+                }
+            }
+
+            delay(300)
+        }
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * ERROR SCREEN
+     * ---------------------------------------------------------
+     */
+
+    if (
+        openError != null &&
+        !publicationReady
+    ) {
+
+        Surface(
+            modifier =
+                Modifier.fillMaxSize()
+        ) {
+
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+
+                contentAlignment =
+                    Alignment.Center
+            ) {
+
+                Text(
+                    text =
+                        "Unable to open EPUB\n\n$openError",
+
+                    style =
+                        MaterialTheme.typography.bodyLarge
+                )
             }
         }
 
+        return
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * READER UI
+     * ---------------------------------------------------------
+     */
+
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(
+                    MaterialTheme.colorScheme.background
+                )
+    ) {
+
         /*
-         * TOP READER BAR
-         *
-         * Only the actual toolbar occupies this layer.
-         * The EPUB reading area remains available for
-         * Readium scrolling.
+         * -----------------------------------------------------
+         * TOP BAR
+         * -----------------------------------------------------
          */
-        if (
-            controlsVisible
-        ) {
+
+        if (controlsVisible) {
 
             TopAppBar(
 
                 title = {
-
                     Text(
-                        text =
-                            "Universal Reader"
+                        text = "EPUB Reader"
                     )
                 },
 
@@ -297,6 +361,7 @@ fun ReadiumEpubScreen(
                         Icon(
                             imageVector =
                                 Icons.Default.ArrowBack,
+
                             contentDescription =
                                 "Back"
                         )
@@ -306,9 +371,12 @@ fun ReadiumEpubScreen(
                 actions = {
 
                     /*
-                     * Table of contents
+                     * TOC
                      */
                     IconButton(
+                        enabled =
+                            publicationReady,
+
                         onClick = {
                             showToc = true
                         }
@@ -317,24 +385,30 @@ fun ReadiumEpubScreen(
                         Icon(
                             imageVector =
                                 Icons.Default.Menu,
+
                             contentDescription =
                                 "Table of contents"
                         )
                     }
 
                     /*
-                     * Search
+                     * SEARCH
                      */
                     IconButton(
+                        enabled =
+                            publicationReady &&
+                                epubFragment
+                                    ?.getPublication()
+                                    ?.isSearchable == true,
+
                         onClick = {
 
                             if (
                                 epubFragment
-                                    ?.getPublication() != null
+                                    ?.getPublication()
+                                    ?.isSearchable == true
                             ) {
-
-                                showSearch =
-                                    true
+                                showSearch = true
                             }
                         }
                     ) {
@@ -342,51 +416,38 @@ fun ReadiumEpubScreen(
                         Icon(
                             imageVector =
                                 Icons.Default.Search,
+
                             contentDescription =
                                 "Search"
                         )
                     }
 
                     /*
-                     * Bookmark
+                     * BOOKMARK
                      */
                     IconButton(
+                        enabled =
+                            publicationReady &&
+                                currentLocator != null,
+
                         onClick = {
 
                             val locator =
                                 currentLocator
                                     ?: return@IconButton
 
-                            val existing =
+                            if (isBookmarked) {
+
                                 ReadiumBookmarkRepository
-                                    .getForDocument(
+                                    .removeBookmark(
                                         context =
-                                            context,
+                                            activity,
+
                                         documentUri =
-                                            uri.toString()
-                                    )
-                                    .firstOrNull {
+                                            uri.toString(),
 
-                                        it.locator.href ==
-                                            locator.href &&
-                                            it.locator
-                                                .locations
-                                                .progression ==
+                                        locator =
                                             locator
-                                                .locations
-                                                .progression
-                                    }
-
-                            if (
-                                existing != null
-                            ) {
-
-                                ReadiumBookmarkRepository
-                                    .remove(
-                                        context =
-                                            context,
-                                        bookmarkId =
-                                            existing.id
                                     )
 
                                 isBookmarked =
@@ -395,27 +456,15 @@ fun ReadiumEpubScreen(
                             } else {
 
                                 ReadiumBookmarkRepository
-                                    .add(
+                                    .addBookmark(
                                         context =
-                                            context,
+                                            activity,
 
-                                        bookmark =
-                                            ReadiumBookmark(
+                                        documentUri =
+                                            uri.toString(),
 
-                                                id =
-                                                    java.util.UUID
-                                                        .randomUUID()
-                                                        .toString(),
-
-                                                documentUri =
-                                                    uri.toString(),
-
-                                                locator =
-                                                    locator,
-
-                                                title =
-                                                    "Bookmark"
-                                            )
+                                        locator =
+                                            locator
                                     )
 
                                 isBookmarked =
@@ -426,23 +475,28 @@ fun ReadiumEpubScreen(
 
                         Icon(
                             imageVector =
-                                if (
-                                    isBookmarked
-                                ) {
+                                if (isBookmarked) {
                                     Icons.Default.Bookmark
                                 } else {
                                     Icons.Default.BookmarkBorder
                                 },
 
                             contentDescription =
-                                "Bookmark"
+                                if (isBookmarked) {
+                                    "Remove bookmark"
+                                } else {
+                                    "Bookmark"
+                                }
                         )
                     }
 
                     /*
-                     * Settings
+                     * SETTINGS
                      */
                     IconButton(
+                        enabled =
+                            publicationReady,
+
                         onClick = {
                             showSettings = true
                         }
@@ -451,6 +505,7 @@ fun ReadiumEpubScreen(
                         Icon(
                             imageVector =
                                 Icons.Default.Settings,
+
                             contentDescription =
                                 "Reader settings"
                         )
@@ -460,11 +515,12 @@ fun ReadiumEpubScreen(
         }
 
         /*
-         * Bottom reading progress.
+         * -----------------------------------------------------
+         * PROGRESS
+         * -----------------------------------------------------
          */
-        if (
-            controlsVisible
-        ) {
+
+        if (controlsVisible && publicationReady) {
 
             LinearProgressIndicator(
 
@@ -474,167 +530,153 @@ fun ReadiumEpubScreen(
 
                 modifier =
                     Modifier
+                        .fillMaxWidth()
                         .align(
                             Alignment.BottomCenter
                         )
-                        .fillMaxSize()
-                        .height(3.dp)
             )
         }
 
         /*
-         * TABLE OF CONTENTS
+         * -----------------------------------------------------
+         * LOADING
+         * -----------------------------------------------------
          */
-        if (
-            showToc &&
-            epubFragment != null
-        ) {
 
-            Surface(
-                modifier =
-                    Modifier.fillMaxSize()
-            ) {
-
-                ReadiumTocPanel(
-
-                    items =
-                        epubFragment
-                            ?.getTableOfContents()
-                            ?: emptyList(),
-
-                    onItemSelected = { item ->
-
-                        epubFragment
-                            ?.openTocItem(
-                                item
-                            )
-
-                        showToc =
-                            false
-                    }
-                )
-            }
-        }
-
-        /*
-         * EPUB SEARCH
-         */
-        if (
-            showSearch
-        ) {
-
-            val publication =
-                epubFragment
-                    ?.getPublication()
-
-            if (
-                publication != null
-            ) {
-
-                Surface(
-                    modifier =
-                        Modifier.fillMaxSize()
-                ) {
-
-                    ReadiumEpubSearchPanel(
-
-                        publication =
-                            publication,
-
-                        onResultSelected = { result ->
-
-                            epubFragment
-                                ?.openSearchResult(
-                                    result
-                                )
-
-                            showSearch =
-                                false
-                        },
-
-                        onClose = {
-
-                            showSearch =
-                                false
-                        }
-                    )
-                }
-            }
-        }
-
-        /*
-         * READER SETTINGS
-         *
-         * Your actual ReaderSettingsPanel only
-         * accepts settings and onSettingsChanged.
-         * It does NOT have onDismiss or onClose.
-         */
-        if (
-            showSettings &&
-            epubFragment != null
-        ) {
-
-            val settings =
-                ReaderSettingsRepository.get(
-                    context =
-                        context,
-                    documentUri =
-                        uri.toString()
-                )
-
-            Surface(
-                modifier =
-                    Modifier.fillMaxSize()
-            ) {
-
-                ReaderSettingsPanel(
-
-                    settings =
-                        settings,
-
-                    onSettingsChanged = { newSettings ->
-
-                        ReaderSettingsRepository
-                            .save(
-                                context =
-                                    context,
-                                documentUri =
-                                    uri.toString(),
-                                settings =
-                                    newSettings
-                            )
-
-                        epubFragment
-                            ?.applyReaderSettings(
-                                newSettings
-                            )
-                    }
-                )
-            }
-        }
-
-        /*
-         * Loading indicator.
-         */
-        if (
-            !publicationReady &&
-            !showToc &&
-            !showSearch &&
-            !showSettings
-        ) {
+        if (!publicationReady && openError == null) {
 
             Box(
                 modifier =
                     Modifier.fillMaxSize(),
+
                 contentAlignment =
                     Alignment.Center
             ) {
 
-                Text(
-                    text =
-                        "Opening EPUB..."
-                )
+                CircularProgressIndicator()
             }
         }
     }
+
+    /*
+     * ---------------------------------------------------------
+     * TOC
+     * ---------------------------------------------------------
+     */
+
+    if (showToc) {
+
+        val fragment =
+            epubFragment
+
+        if (fragment != null) {
+
+            ReadiumTocPanel(
+
+                items =
+                    fragment.getTableOfContents(),
+
+                onItemSelected = { item ->
+
+                    fragment.openTocItem(
+                        item
+                    )
+
+                    showToc = false
+                },
+
+                onClose = {
+                    showToc = false
+                }
+            )
+        }
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * SEARCH
+     * ---------------------------------------------------------
+     */
+
+    if (showSearch) {
+
+        val publication =
+            epubFragment
+                ?.getPublication()
+
+        if (publication != null) {
+
+            ReadiumEpubSearchPanel(
+
+                publication =
+                    publication,
+
+                onResultSelected = { result ->
+
+                    epubFragment
+                        ?.openSearchResult(
+                            result
+                        )
+
+                    showSearch = false
+                },
+
+                onClose = {
+                    showSearch = false
+                }
+            )
+        }
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * SETTINGS
+     * ---------------------------------------------------------
+     */
+
+    if (showSettings) {
+
+        val settings =
+            ReaderSettingsRepository.get(
+                context =
+                    activity,
+
+                documentUri =
+                    uri.toString()
+            )
+
+        ReadiumReaderSettingsDialog(
+
+            settings =
+                settings,
+
+            onSave = { newSettings ->
+
+                ReaderSettingsRepository.save(
+                    context =
+                        activity,
+
+                    documentUri =
+                        uri.toString(),
+
+                    settings =
+                        newSettings
+                )
+
+                epubFragment
+                    ?.applyReaderSettings(
+                        newSettings
+                    )
+
+                showSettings = false
+            },
+
+            onDismiss = {
+                showSettings = false
+            }
+        )
+    }
 }
+
+private const val READIUM_FRAGMENT_TAG =
+    "universal_reader_readium_epub"
