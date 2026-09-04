@@ -13,12 +13,16 @@ import org.readium.r2.navigator.epub.EpubDefaults
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.shared.publication.Link
 
 class ReadiumEpubFragment :
     Fragment(),
     EpubNavigatorFragment.Listener {
 
     private var navigatorContainerId: Int = 0
+
+    private var tocItems: List<ReadiumTocItem> =
+        emptyList()
 
     override fun onCreate(
         savedInstanceState: Bundle?
@@ -96,6 +100,16 @@ class ReadiumEpubFragment :
                         return@onSuccess
                     }
 
+                    /*
+                     * Read the real EPUB table of contents.
+                     */
+                    tocItems =
+                        publication
+                            .tableOfContents
+                            .map {
+                                it.toReadiumTocItem()
+                            }
+
                     val savedLocator =
                         ReadiumReadingPositionRepository
                             .get(
@@ -116,6 +130,7 @@ class ReadiumEpubFragment :
 
                     val preferences =
                         EpubPreferences(
+
                             fontSize =
                                 savedSettings
                                     .fontSize
@@ -187,10 +202,19 @@ class ReadiumEpubFragment :
     }
 
     /**
-     * Jump to a Readium TOC item.
+     * Returns the EPUB's real hierarchical TOC.
+     */
+    fun getTableOfContents():
+        List<ReadiumTocItem> {
+
+        return tocItems
+    }
+
+    /**
+     * Navigate to a TOC item.
      *
-     * The navigator receives the link's
-     * absolute URL and navigates to it.
+     * The actual navigator navigation will be
+     * connected from the EPUB screen.
      */
     fun openTocItem(
         item: ReadiumTocItem
@@ -224,7 +248,7 @@ class ReadiumEpubFragment :
             } catch (
                 exception: Exception
             ) {
-                // Navigation failures are ignored here.
+                // Ignore invalid TOC targets.
             }
         }
     }
