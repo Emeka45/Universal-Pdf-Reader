@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -60,12 +61,7 @@ fun PdfReaderView(uri: Uri) {
     var offsetY by remember { mutableFloatStateOf(0f) }
     var showSearch by remember { mutableStateOf(false) }
 
-    fun resetZoom() {
-        scale = 1f
-        offsetX = 0f
-        offsetY = 0f
-    }
-
+    fun resetZoom() { scale = 1f; offsetX = 0f; offsetY = 0f }
     BackHandler { }
 
     LaunchedEffect(uri) {
@@ -75,14 +71,11 @@ fun PdfReaderView(uri: Uri) {
         try {
             tempFile = withContext(Dispatchers.IO) {
                 val file = File(context.cacheDir, "pdf_${System.currentTimeMillis()}.pdf")
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    file.outputStream().use { output -> input.copyTo(output) }
-                } ?: throw IllegalStateException("Unable to open PDF file.")
+                context.contentResolver.openInputStream(uri)?.use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+                    ?: throw IllegalStateException("Unable to open PDF file.")
                 file
             }
-            descriptor = withContext(Dispatchers.IO) {
-                ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
-            }
+            descriptor = withContext(Dispatchers.IO) { ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY) }
             renderer = withContext(Dispatchers.IO) { PdfRenderer(descriptor!!) }
             pageCount = renderer!!.pageCount
             if (pageCount <= 0) throw IllegalStateException("The PDF contains no pages.")
@@ -99,38 +92,25 @@ fun PdfReaderView(uri: Uri) {
                             try {
                                 val width = (page.width * 2f).toInt()
                                 val height = (page.height * 2f).toInt()
-                                Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { result ->
-                                    page.render(result, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                }
-                            } finally {
-                                page.close()
-                            }
+                                Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { result -> page.render(result, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY) }
+                            } finally { page.close() }
                         }
                         ensureActive()
                         if (currentPage == requestedPage) {
-                            bitmap?.recycle()
-                            bitmap = renderedBitmap
-                            renderedPage = requestedPage
-                            resetZoom()
-                        } else {
-                            renderedBitmap.recycle()
-                        }
+                            bitmap?.recycle(); bitmap = renderedBitmap; renderedPage = requestedPage; resetZoom()
+                        } else renderedBitmap.recycle()
                     } catch (exception: Exception) {
                         if (exception is kotlinx.coroutines.CancellationException) throw exception
                         error = exception.message ?: "Unable to render PDF page."
-                    } finally {
-                        if (currentPage == requestedPage) loading = false
-                    }
+                    } finally { if (currentPage == requestedPage) loading = false }
                 }
                 delay(40)
             }
         } catch (exception: Exception) {
             if (exception is kotlinx.coroutines.CancellationException) throw exception
-            error = exception.message ?: "Unable to open PDF."
-            loading = false
+            error = exception.message ?: "Unable to open PDF."; loading = false
         } finally {
-            bitmap?.recycle()
-            bitmap = null
+            bitmap?.recycle(); bitmap = null
             withContext(Dispatchers.IO) {
                 try { renderer?.close() } catch (_: Exception) { }
                 try { descriptor?.close() } catch (_: Exception) { }
@@ -139,72 +119,31 @@ fun PdfReaderView(uri: Uri) {
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (pageCount > 0) "Page ${currentPage + 1} / $pageCount" else "PDF",
-                    style = MaterialTheme.typography.titleMedium
-                )
+    Surface(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().padding(4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                Text(if (pageCount > 0) "Page ${currentPage + 1} / $pageCount" else "PDF", style = MaterialTheme.typography.titleMedium)
                 Row {
-                    IconButton(onClick = { if (currentPage > 0) currentPage-- }, enabled = currentPage > 0) {
-                        Icon(Icons.Default.ArrowBack, "Previous page")
-                    }
-                    IconButton(onClick = { if (currentPage < pageCount - 1) currentPage++ }, enabled = currentPage < pageCount - 1) {
-                        Icon(Icons.Default.ArrowBack, "Next page", modifier = Modifier.graphicsLayer { rotationY = 180f })
-                    }
-                    IconButton(onClick = { scale = (scale + 0.25f).coerceAtMost(4f) }) {
-                        Icon(Icons.Default.ZoomIn, "Zoom in")
-                    }
-                    IconButton(onClick = {
-                        scale = (scale - 0.25f).coerceAtLeast(1f)
-                        if (scale == 1f) { offsetX = 0f; offsetY = 0f }
-                    }) {
-                        Icon(Icons.Default.ZoomOut, "Zoom out")
-                    }
-                    IconButton(onClick = { showSearch = true }) {
-                        Icon(Icons.Default.Search, "Search PDF")
-                    }
+                    IconButton({ if (currentPage > 0) currentPage-- }, currentPage > 0) { Icon(Icons.Default.ArrowBack, "Previous page") }
+                    IconButton({ if (currentPage < pageCount - 1) currentPage++ }, currentPage < pageCount - 1) { Icon(Icons.Default.ArrowBack, "Next page", Modifier.graphicsLayer { rotationY = 180f }) }
+                    IconButton({ scale = (scale + 0.25f).coerceAtMost(4f) }) { Icon(Icons.Default.ZoomIn, "Zoom in") }
+                    IconButton({ scale = (scale - 0.25f).coerceAtLeast(1f); if (scale == 1f) { offsetX = 0f; offsetY = 0f } }) { Icon(Icons.Default.ZoomOut, "Zoom out") }
+                    IconButton({ showSearch = true }) { Icon(Icons.Default.Search, "Search PDF") }
                 }
             }
-            Box(
-                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).pointerInput(scale) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        scale = (scale * zoom).coerceIn(1f, 4f)
-                        if (scale > 1f) { offsetX += pan.x; offsetY += pan.y }
-                        else { offsetX = 0f; offsetY = 0f }
-                    }
-                },
-                contentAlignment = Alignment.Center
-            ) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).pointerInput(scale) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    scale = (scale * zoom).coerceIn(1f, 4f)
+                    if (scale > 1f) { offsetX += pan.x; offsetY += pan.y } else { offsetX = 0f; offsetY = 0f }
+                }
+            }, contentAlignment = Alignment.Center) {
                 when {
                     error != null -> Text(error ?: "Unable to open PDF.", Modifier.padding(24.dp))
-                    bitmap != null -> Image(
-                        bitmap = bitmap!!.asImageBitmap(),
-                        contentDescription = "PDF page ${currentPage + 1}",
-                        modifier = Modifier.fillMaxSize().graphicsLayer {
-                            scaleX = scale; scaleY = scale; translationX = offsetX; translationY = offsetY
-                        },
-                        contentScale = ContentScale.Fit
-                    )
+                    bitmap != null -> Image(bitmap = bitmap!!.asImageBitmap(), contentDescription = "PDF page ${currentPage + 1}", modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offsetX; translationY = offsetY }, contentScale = ContentScale.Fit)
                     loading -> CircularProgressIndicator()
                 }
             }
         }
     }
-
-    if (showSearch) {
-        PdfSearchDialog(
-            uri = uri,
-            onDismiss = { showSearch = false },
-            onOpenPage = { page ->
-                currentPage = page.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
-                showSearch = false
-            }
-        )
-    }
+    if (showSearch) PdfSearchDialog(uri, { showSearch = false }) { page -> currentPage = page.coerceIn(0, (pageCount - 1).coerceAtLeast(0)); showSearch = false }
 }
