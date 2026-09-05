@@ -10,7 +10,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.view.Gravity
-import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
@@ -31,6 +30,7 @@ class MainActivity : Activity() {
     private var descriptor: ParcelFileDescriptor? = null
     private var currentPage = 0
     private var pdfFile: File? = null
+    private var currentBitmap: Bitmap? = null
     private var zoom = 1f
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,39 +88,65 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Android API 33")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_OPEN && resultCode == RESULT_OK) data?.data?.let { openPdf(it) }
+        if (requestCode == REQUEST_OPEN && resultCode == RESULT_OK) {
+            data?.data?.let { uri ->
+                if ((data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
+                    try {
+                        contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    } catch (_: SecurityException) {
+                        // Provider does not support persistable permissions.
+                    }
+                }
+                openPdf(uri)
+            }
+        }
     }
 
     private fun openPdf(uri: Uri) {
         try {
             closePdf()
-            pdfFile = File(cacheDir, "current.pdf")
-            contentResolver.openInputStream(uri)!!.use { input -> FileOutputStream(pdfFile!!).use { output -> input.copyTo(output) } }
-            descriptor = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+            val destination = File.createTempFile("reader_", ".pdf", cacheDir)
+            contentResolver.openInputStream(uri).use { input ->
+                requireNotNull(input) { "Unable to read PDF" }
+                FileOutputStream(destination).use { output -> input.copyTo(output) }
+            }
+            pdfFile?.delete()
+            pdfFile = destination
+            descriptor = ParcelFileDescriptor.open(destination, ParcelFileDescriptor.MODE_READ_ONLY)
             renderer = PdfRenderer(descriptor!!)
             currentPage = 0
             zoom = 1f
             showPage(0)
             Toast.makeText(this, "${renderer!!.pageCount} pages", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            Toast.makeText(this, "Could not open PDF: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Could not open PDF: ${e.message ?: "unknown error"}", Toast.LENGTH_LONG).show()
         }
     }
 
     private fun showPage(index: Int) {
         val r = renderer ?: return
         if (index !in 0 until r.pageCount) return
-        val page = r.openPage(index)
-        val width = (page.width * resources.displayMetrics.density).toInt().coerceAtLeast(800)
-        val height = (page.height.toFloat() / page.width * width).toInt()
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        bitmap.eraseColor(Color.WHITE)
-        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-        page.close()
-        pageImage.setImageBitmap(bitmap)
-        currentPage = index
-        pageLabel.text = "Page ${index + 1} / ${r.pageCount}"
-        applyMatrix()
+        try {
+            val page = r.openPage(index)
+            val maxWidth = 2048
+            val width = (page.width * resources.displayMetrics.density)
+                .toInt()
+                .coerceAtLeast(800)
+                .coerceAtMost(maxWidth)
+            val height = (page.height.toFloat() / page.width * width).toInt().coerceAtLeast(1)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(Color.WHITE)
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+            currentBitmap?.recycle()
+            currentBitmap = bitmap
+            pageImage.setImageBitmap(bitmap)
+            currentPage = index
+            pageLabel.text = "Page ${index + 1} / ${r.pageCount}"
+            applyMatrix()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Could not render page: ${e.message ?: "unknown error"}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun setZoom(value: Float) {
@@ -129,12 +155,18 @@ class MainActivity : Activity() {
     }
 
     private fun applyMatrix() {
-        pageImage.imageMatrix = Matrix().apply { postScale(zoom, zoom, pageImage.width / 2f, pageImage.height / 2f) }
+        pageImage.imageMatrix = Matrix().apply {
+            postScale(zoom, zoom, pageImage.width / 2f, pageImage.height / 2f)
+        }
     }
 
     private fun searchPdf(query: String) {
-        val file = pdfFile ?: run { Toast.makeText(this, "Open a PDF first", Toast.LENGTH_SHORT).show(); return }
-        if (query.trim().isEmpty()) return
+        val file = pdfFile ?: run {
+            Toast.makeText(this, "Open a PDF first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val normalized = query.trim()
+        if (normalized.isEmpty()) return
         Thread {
             try {
                 PDDocument.load(file).use { document ->
@@ -143,23 +175,44 @@ class MainActivity : Activity() {
                     for (page in 1..document.numberOfPages) {
                         stripper.startPage = page
                         stripper.endPage = page
-                        if (stripper.getText(document).contains(query, ignoreCase = true)) { found = page - 1; break }
+                        if (stripper.getText(document).contains(normalized, ignoreCase = true)) {
+                            found = page - 1
+                            break
+                        }
                     }
                     runOnUiThread {
+                        if (pdfFile != file) return@runOnUiThread
                         if (found >= 0) {
                             showPage(found)
                             Toast.makeText(this, "Found on page ${found + 1}", Toast.LENGTH_SHORT).show()
-                        } else Toast.makeText(this, "No match found", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this, "No match found", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             } catch (e: Exception) {
-                runOnUiThread { Toast.makeText(this, "Search failed: ${e.message}", Toast.LENGTH_LONG).show() }
+                runOnUiThread { Toast.makeText(this, "Search failed: ${e.message ?: "unknown error"}", Toast.LENGTH_LONG).show() }
             }
         }.start()
     }
 
-    private fun closePdf() { renderer?.close(); renderer = null; descriptor?.close(); descriptor = null }
-    override fun onDestroy() { closePdf(); super.onDestroy() }
+    private fun closePdf() {
+        renderer?.close()
+        renderer = null
+        descriptor?.close()
+        descriptor = null
+        currentBitmap?.recycle()
+        currentBitmap = null
+        pageImage.setImageDrawable(null)
+    }
+
+    override fun onDestroy() {
+        closePdf()
+        pdfFile?.delete()
+        pdfFile = null
+        super.onDestroy()
+    }
+
     private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
     companion object { private const val REQUEST_OPEN = 42 }
 }
