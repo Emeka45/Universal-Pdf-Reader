@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.coeric.universalreader
 
 import android.net.Uri
@@ -23,18 +25,10 @@ import androidx.fragment.app.FragmentActivity
 
 class ReaderActivity : FragmentActivity() {
 
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val uri =
-            intent
-                .getStringExtra("uri")
-                ?.let {
-                    Uri.parse(it)
-                }
-                ?: intent.data
+        val uri = intent.getStringExtra("uri")?.let(Uri::parse) ?: intent.data
 
         if (uri == null) {
             finish()
@@ -42,366 +36,148 @@ class ReaderActivity : FragmentActivity() {
         }
 
         setContent {
-            ReaderContent(
-                uri = uri
-            )
+            ReaderContent(uri = uri)
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReaderContent(
-    uri: Uri
-) {
+private fun ReaderContent(uri: Uri) {
+    val context = LocalContext.current
 
-    val context =
-        LocalContext.current
-
-    var format by remember {
-        mutableStateOf<DocumentFormat?>(null)
-    }
-
-    var error by remember {
-        mutableStateOf<String?>(null)
-    }
+    var format by remember { mutableStateOf<DocumentFormat?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(uri) {
-
         try {
-
-            format =
-                DocumentFormatDetector.detect(
-                    context,
-                    uri
-                )
-
-        } catch (
-            exception: Exception
-        ) {
-
-            error =
-                exception.message
-                    ?: "Unable to detect document format."
+            format = DocumentFormatDetector.detect(context, uri)
+        } catch (exception: Exception) {
+            error = exception.message ?: "Unable to detect document format."
         }
     }
 
     when {
-
-        error != null -> {
-
-            ErrorScreen(
-                message =
-                    error
-                        ?: "Unable to open document."
-            )
-        }
-
-        format == null -> {
-
-            LoadingScreen()
-        }
-
-        format == DocumentFormat.PDF -> {
-
-            PdfReaderView(
-                uri = uri
-            )
-        }
-
-        format == DocumentFormat.EPUB -> {
-
-            ReadiumEpubContent(
-                uri = uri
-            )
-        }
-
-        format == DocumentFormat.CBZ -> {
-
-            CbzReaderContent(
-                uri = uri
-            )
-        }
-
-        format == DocumentFormat.CBR -> {
-
-            CbrReaderContent(
-                uri = uri
-            )
-        }
-
-        format == DocumentFormat.ZIP -> {
-
-            RoutedDocumentContent(
-                uri = uri
-            )
-        }
-
-        else -> {
-
-            RoutedDocumentContent(
-                uri = uri
-            )
-        }
+        error != null -> ErrorScreen(error ?: "Unable to open document.")
+        format == null -> LoadingScreen()
+        format == DocumentFormat.PDF -> PdfReaderView(uri = uri)
+        format == DocumentFormat.EPUB -> ReadiumEpubContent(uri = uri)
+        format == DocumentFormat.CBZ -> CbzReaderContent(uri = uri)
+        format == DocumentFormat.CBR -> CbrReaderContent(uri = uri)
+        format == DocumentFormat.ZIP -> RoutedDocumentContent(uri = uri)
+        else -> RoutedDocumentContent(uri = uri)
     }
 }
 
 @Composable
-private fun ReadiumEpubContent(
-    uri: Uri
-) {
+private fun ReadiumEpubContent(uri: Uri) {
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
 
-    val context =
-        LocalContext.current
-
-    val activity =
-        context as? FragmentActivity
-
-    when {
-
-        activity == null -> {
-
-            ErrorScreen(
-                message =
-                    "Unable to initialize the EPUB reader."
-            )
-        }
-
-        else -> {
-
-            ReadiumEpubScreen(
-                uri = uri,
-                activity = activity,
-                modifier =
-                    Modifier.fillMaxSize()
-            )
-        }
+    if (activity == null) {
+        ErrorScreen("Unable to initialize the EPUB reader.")
+    } else {
+        ReadiumEpubScreen(
+            uri = uri,
+            activity = activity,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
 @Composable
-private fun RoutedDocumentContent(
-    uri: Uri
-) {
+private fun RoutedDocumentContent(uri: Uri) {
+    val context = LocalContext.current
 
-    val context =
-        LocalContext.current
-
-    var document by remember {
-        mutableStateOf<ReaderDocument?>(null)
-    }
-
-    var error by remember {
-        mutableStateOf<String?>(null)
-    }
+    var document by remember { mutableStateOf<ReaderDocument?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(uri) {
-
         try {
-
-            document =
-                ReaderFormatRouter.open(
-                    context,
-                    uri
-                )
-
-        } catch (
-            exception: Exception
-        ) {
-
-            error =
-                exception.message
-                    ?: "Unable to open this document."
+            document = ReaderFormatRouter.open(context, uri)
+        } catch (exception: Exception) {
+            error = exception.message ?: "Unable to open this document."
         }
     }
 
     when {
-
-        error != null -> {
-
-            ErrorScreen(
-                message =
-                    error
-                        ?: "Unable to open document."
-            )
-        }
-
-        document == null -> {
-
-            LoadingScreen()
-        }
-
-        else -> {
-
-            ReaderDocumentScreen(
-                document = document!!,
-                documentUri =
-                    uri.toString()
-            )
-        }
+        error != null -> ErrorScreen(error ?: "Unable to open document.")
+        document == null -> LoadingScreen()
+        else -> ReaderDocumentScreen(
+            document = document!!,
+            documentUri = uri.toString()
+        )
     }
 }
 
 @Composable
-private fun CbzReaderContent(
-    uri: Uri
-) {
+private fun CbzReaderContent(uri: Uri) {
+    val context = LocalContext.current
 
-    val context =
-        LocalContext.current
-
-    var archive by remember {
-        mutableStateOf<ComicArchive?>(null)
-    }
-
-    var error by remember {
-        mutableStateOf<String?>(null)
-    }
+    var archive by remember { mutableStateOf<ComicArchive?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(uri) {
-
         try {
-
-            archive =
-                CbzReader.open(
-                    context,
-                    uri
-                )
-
-        } catch (
-            exception: Exception
-        ) {
-
-            error =
-                exception.message
-                    ?: "Unable to open CBZ file."
+            archive = CbzReader.open(context, uri)
+        } catch (exception: Exception) {
+            error = exception.message ?: "Unable to open CBZ file."
         }
     }
 
     when {
-
-        error != null -> {
-
-            ErrorScreen(
-                message =
-                    error
-                        ?: "Unable to open CBZ."
-            )
-        }
-
-        archive == null -> {
-
-            LoadingScreen()
-        }
-
-        else -> {
-
-            ComicReaderScreen(
-                pages =
-                    archive!!.pages,
-                documentUri =
-                    uri.toString()
-            )
-        }
+        error != null -> ErrorScreen(error ?: "Unable to open CBZ.")
+        archive == null -> LoadingScreen()
+        else -> ComicReaderScreen(
+            pages = archive!!.pages,
+            documentUri = uri.toString()
+        )
     }
 }
 
 @Composable
-private fun CbrReaderContent(
-    uri: Uri
-) {
+private fun CbrReaderContent(uri: Uri) {
+    val context = LocalContext.current
 
-    val context =
-        LocalContext.current
-
-    var archive by remember {
-        mutableStateOf<ComicArchive?>(null)
-    }
-
-    var error by remember {
-        mutableStateOf<String?>(null)
-    }
+    var archive by remember { mutableStateOf<ComicArchive?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(uri) {
-
         try {
-
-            archive =
-                CbrReader.open(
-                    context,
-                    uri
-                )
-
-        } catch (
-            exception: Exception
-        ) {
-
-            error =
-                exception.message
-                    ?: "Unable to open CBR file."
+            archive = CbrReader.open(context, uri)
+        } catch (exception: Exception) {
+            error = exception.message ?: "Unable to open CBR file."
         }
     }
 
     when {
-
-        error != null -> {
-
-            ErrorScreen(
-                message =
-                    error
-                        ?: "Unable to open CBR."
-            )
-        }
-
-        archive == null -> {
-
-            LoadingScreen()
-        }
-
-        else -> {
-
-            ComicReaderScreen(
-                pages =
-                    archive!!.pages,
-                documentUri =
-                    uri.toString()
-            )
-        }
+        error != null -> ErrorScreen(error ?: "Unable to open CBR.")
+        archive == null -> LoadingScreen()
+        else -> ComicReaderScreen(
+            pages = archive!!.pages,
+            documentUri = uri.toString()
+        )
     }
 }
 
 @Composable
 private fun LoadingScreen() {
-
     Box(
-        modifier =
-            Modifier.fillMaxSize(),
-        contentAlignment =
-            Alignment.Center
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-
         CircularProgressIndicator()
     }
 }
 
 @Composable
-private fun ErrorScreen(
-    message: String
-) {
-
+private fun ErrorScreen(message: String) {
     Box(
-        modifier =
-            Modifier.fillMaxSize(),
-        contentAlignment =
-            Alignment.Center
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-
         Text(
             text = message,
-            modifier =
-                Modifier.padding(
-                    24.dp
-                )
+            modifier = Modifier.padding(24.dp)
         )
     }
 }
