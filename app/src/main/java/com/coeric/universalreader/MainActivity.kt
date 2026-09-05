@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -49,8 +50,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import java.text.DateFormat
 import java.util.Date
@@ -70,6 +71,7 @@ fun UniversalReaderHome() {
     var showMenu by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showAi by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var readerTheme by remember { mutableStateOf(ReaderTheme.LIGHT) }
     var filePickerError by remember { mutableStateOf<String?>(null) }
@@ -86,9 +88,7 @@ fun UniversalReaderHome() {
             filePickerError = "Audio and video files are not supported."
             return@rememberLauncherForActivityResult
         }
-        try {
-            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } catch (_: Exception) { }
+        try { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
         LibraryRepository.addOrUpdateBook(context, info)
         libraryBooks = LibraryRepository.getBooks(context)
         openReader(context, info.uri)
@@ -96,9 +96,7 @@ fun UniversalReaderHome() {
 
     val folderPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
         if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            } catch (_: Exception) { }
+            try { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } catch (_: Exception) { }
             Toast.makeText(context, "Folder selected", Toast.LENGTH_SHORT).show()
         }
     }
@@ -122,6 +120,7 @@ fun UniversalReaderHome() {
                 title = { Text("Universal Reader") },
                 navigationIcon = { IconButton({ showMenu = true }) { Icon(Icons.Default.Menu, "Menu") } },
                 actions = {
+                    IconButton({ showAi = true }) { Icon(Icons.Default.AutoAwesome, "AI Assistant") }
                     IconButton({ showSearch = true }) { Icon(Icons.Default.Search, "Search") }
                     IconButton({ showSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
                 }
@@ -176,13 +175,20 @@ fun UniversalReaderHome() {
                     Text("Quick Access", style = MaterialTheme.typography.titleLarge)
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        QuickAccessCard("AI Assistant", Icons.Default.AutoAwesome, Modifier.weight(1f)) { showAi = true }
                         QuickAccessCard("Folders", Icons.Default.Folder, Modifier.weight(1f)) { folderPickerLauncher.launch(null) }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         QuickAccessCard("Favorites", Icons.Default.Favorite, Modifier.weight(1f)) { showFavorites = true }
+                        Spacer(Modifier.weight(1f))
                     }
                     Spacer(Modifier.height(24.dp))
                 }
             }
         }
+
+        if (showAi) AiAssistantScreen(onBack = { showAi = false })
 
         if (showMenu) AlertDialog(onDismissRequest = { showMenu = false }, title = { Text("Menu") }, text = {
             Column {
@@ -190,6 +196,7 @@ fun UniversalReaderHome() {
                 TextButton({ showFavorites = false; showMenu = false; openFile() }, Modifier.fillMaxWidth()) { Text("Open File") }
                 TextButton({ showMenu = false; showSettings = true }, Modifier.fillMaxWidth()) { Text("Settings") }
                 TextButton({ showMenu = false; showSearch = true }, Modifier.fillMaxWidth()) { Text("Search Library") }
+                TextButton({ showMenu = false; showAi = true }, Modifier.fillMaxWidth()) { Text("AI Assistant") }
             }
         }, confirmButton = { TextButton({ showMenu = false }) { Text("Close") } })
 
