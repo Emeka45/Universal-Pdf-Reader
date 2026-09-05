@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Bundle
@@ -30,6 +31,7 @@ class MainActivity : Activity() {
     private var descriptor: ParcelFileDescriptor? = null
     private var currentPage = 0
     private var pdfFile: File? = null
+    private var zoom = 1f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,26 +41,48 @@ class MainActivity : Activity() {
 
     private fun buildUi() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(245, 245, 248)) }
-        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(10, 8, 10, 8) }
+        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(8, 6, 8, 6) }
         val open = Button(this).apply { text = "Open PDF"; setOnClickListener { openPicker() } }
-        searchBox = EditText(this).apply { hint = "Search in PDF"; setSingleLine(true); setPadding(18, 0, 18, 0) }
+        searchBox = EditText(this).apply { hint = "Search in PDF"; setSingleLine(true); setPadding(14, 0, 14, 0) }
         val search = Button(this).apply { text = "Search"; setOnClickListener { searchPdf(searchBox.text.toString()) } }
         top.addView(open, LinearLayout.LayoutParams(0, 50.dp(), 1f))
         top.addView(searchBox, LinearLayout.LayoutParams(0, 50.dp(), 1.5f))
         top.addView(search, LinearLayout.LayoutParams(0, 50.dp(), 0.8f))
-        pageImage = ImageView(this).apply { adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.WHITE) }
+
+        pageImage = ImageView(this).apply {
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.MATRIX
+            setBackgroundColor(Color.WHITE)
+        }
         pageLabel = TextView(this).apply { text = "Open a PDF to begin"; gravity = Gravity.CENTER; setPadding(8, 8, 8, 8) }
-        val controls = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(8, 8, 8, 12) }
-        val previous = Button(this).apply { text = "‹ Previous"; setOnClickListener { showPage(currentPage - 1) } }
-        val next = Button(this).apply { text = "Next ›"; setOnClickListener { showPage(currentPage + 1) } }
+
+        val controls = LinearLayout(this).apply { gravity = Gravity.CENTER; setPadding(8, 6, 8, 10) }
+        val previous = Button(this).apply { text = "‹"; setOnClickListener { showPage(currentPage - 1) } }
+        val zoomOut = Button(this).apply { text = "−"; setOnClickListener { setZoom(zoom - 0.25f) } }
+        val reset = Button(this).apply { text = "100%"; setOnClickListener { setZoom(1f) } }
+        val zoomIn = Button(this).apply { text = "+"; setOnClickListener { setZoom(zoom + 0.25f) } }
+        val next = Button(this).apply { text = "›"; setOnClickListener { showPage(currentPage + 1) } }
         controls.addView(previous, LinearLayout.LayoutParams(0, 52.dp(), 1f))
-        controls.addView(pageLabel, LinearLayout.LayoutParams(0, 52.dp(), 1f))
+        controls.addView(zoomOut, LinearLayout.LayoutParams(0, 52.dp(), 0.8f))
+        controls.addView(reset, LinearLayout.LayoutParams(0, 52.dp(), 1f))
+        controls.addView(zoomIn, LinearLayout.LayoutParams(0, 52.dp(), 0.8f))
         controls.addView(next, LinearLayout.LayoutParams(0, 52.dp(), 1f))
-        root.addView(top); root.addView(pageImage, LinearLayout.LayoutParams(-1, 0, 1f)); root.addView(controls); setContentView(root)
+
+        val pageRow = LinearLayout(this).apply { gravity = Gravity.CENTER }
+        pageRow.addView(pageLabel, LinearLayout.LayoutParams(-1, 40.dp()))
+        root.addView(top)
+        root.addView(pageImage, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(pageRow)
+        root.addView(controls)
+        setContentView(root)
     }
 
     private fun openPicker() {
-        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "application/pdf"; addCategory(Intent.CATEGORY_OPENABLE); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) }, REQUEST_OPEN)
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            type = "application/pdf"
+            addCategory(Intent.CATEGORY_OPENABLE)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }, REQUEST_OPEN)
     }
 
     @Deprecated("Deprecated in Android API 33")
@@ -75,9 +99,12 @@ class MainActivity : Activity() {
             descriptor = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
             renderer = PdfRenderer(descriptor!!)
             currentPage = 0
+            zoom = 1f
             showPage(0)
             Toast.makeText(this, "${renderer!!.pageCount} pages", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) { Toast.makeText(this, "Could not open PDF: ${e.message}", Toast.LENGTH_LONG).show() }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Could not open PDF: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun showPage(index: Int) {
@@ -92,7 +119,17 @@ class MainActivity : Activity() {
         page.close()
         pageImage.setImageBitmap(bitmap)
         currentPage = index
-        pageLabel.text = "${index + 1} / ${r.pageCount}"
+        pageLabel.text = "Page ${index + 1} / ${r.pageCount}"
+        applyMatrix()
+    }
+
+    private fun setZoom(value: Float) {
+        zoom = value.coerceIn(0.5f, 3f)
+        applyMatrix()
+    }
+
+    private fun applyMatrix() {
+        pageImage.imageMatrix = Matrix().apply { postScale(zoom, zoom, pageImage.width / 2f, pageImage.height / 2f) }
     }
 
     private fun searchPdf(query: String) {
@@ -104,12 +141,20 @@ class MainActivity : Activity() {
                     val stripper = PDFTextStripper()
                     var found = -1
                     for (page in 1..document.numberOfPages) {
-                        stripper.startPage = page; stripper.endPage = page
+                        stripper.startPage = page
+                        stripper.endPage = page
                         if (stripper.getText(document).contains(query, ignoreCase = true)) { found = page - 1; break }
                     }
-                    runOnUiThread { if (found >= 0) { showPage(found); Toast.makeText(this, "Found on page ${found + 1}", Toast.LENGTH_SHORT).show() } else Toast.makeText(this, "No match found", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread {
+                        if (found >= 0) {
+                            showPage(found)
+                            Toast.makeText(this, "Found on page ${found + 1}", Toast.LENGTH_SHORT).show()
+                        } else Toast.makeText(this, "No match found", Toast.LENGTH_SHORT).show()
+                    }
                 }
-            } catch (e: Exception) { runOnUiThread { Toast.makeText(this, "Search failed: ${e.message}", Toast.LENGTH_LONG).show() } }
+            } catch (e: Exception) {
+                runOnUiThread { Toast.makeText(this, "Search failed: ${e.message}", Toast.LENGTH_LONG).show() }
+            }
         }.start()
     }
 
