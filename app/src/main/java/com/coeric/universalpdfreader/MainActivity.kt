@@ -210,19 +210,19 @@ class MainActivity : Activity() {
             background(Color.rgb(67, 56, 180), 12)
         }
         accent.addView(mark, LinearLayout.LayoutParams(dp(42), dp(42)))
-        val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(11), 0, dp(8), 0) }
-        text.addView(TextView(this).apply {
+        val textContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(11), 0, dp(8), 0) }
+        textContainer.addView(TextView(this).apply {
             text = "Continue reading"
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.rgb(43, 40, 76))
         })
-        text.addView(TextView(this).apply {
+        textContainer.addView(TextView(this).apply {
             text = "Open your latest document and continue where you stopped."
             textSize = 11f
             setTextColor(Color.rgb(93, 90, 119))
         })
-        accent.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
+        accent.addView(textContainer, LinearLayout.LayoutParams(0, -2, 1f))
         panel.addView(accent, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
 
         panel.addView(TextView(this).apply {
