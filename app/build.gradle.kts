@@ -26,10 +26,9 @@ dependencies {
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 }
 
-// The redesigned activity was written with Java-style Android view calls.
-// Normalize two Kotlin interop issues before Kotlin compilation: Android's
-// deprecated singleLine property and the UI helper's integer corner-radius API.
-val fixPdfReaderSource by tasks.registering {
+// Normalize the redesigned activity before Android's Kotlin compilation task.
+// This runs from preBuild, which is guaranteed to execute before compilation.
+tasks.named("preBuild") {
     doLast {
         val source = file("src/main/java/com/coeric/universalpdfreader/MainActivity.kt")
         var text = source.readText()
@@ -39,8 +38,4 @@ val fixPdfReaderSource by tasks.registering {
         text = text.replace("singleLine = true", "setSingleLine(true)")
         source.writeText(text)
     }
-}
-
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    dependsOn(fixPdfReaderSource)
 }
