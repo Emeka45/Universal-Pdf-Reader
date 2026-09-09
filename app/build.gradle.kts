@@ -36,6 +36,45 @@ tasks.named("preBuild") {
             text = text.replace(", ${value}f)", ", ${value})")
         }
         text = text.replace("singleLine = true", "setSingleLine(true)")
+
+        // Android back/swipe-back should leave the PDF reader and return to the
+        // in-app library instead of finishing the entire reader Activity.
+        // The API 33+ callback handles gesture navigation; onBackPressed keeps
+        // the same behavior on older Android versions.
+        if (!text.contains("__universalPdfReaderBackNavigation")) {
+            val insertion = """
+
+    private fun __universalPdfReaderBackNavigation() {
+        if (readerPanel.visibility == View.VISIBLE) {
+            closePdf()
+            showLibrary()
+        } else {
+            super.onBackPressed()
+        }
+    }
+
+    override fun onBackPressed() {
+        __universalPdfReaderBackNavigation()
+    }
+""".trimIndent()
+            val classEnd = text.lastIndexOf("\n}")
+            if (classEnd >= 0) {
+                text = text.substring(0, classEnd) + "\n" + insertion + text.substring(classEnd)
+            }
+
+            val onCreateMarker = "        showLibrary()\n"
+            val onCreateReplacement = """
+        showLibrary()
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT
+            ) {
+                __universalPdfReaderBackNavigation()
+            }
+        }
+""".trimIndent() + "\n"
+            text = text.replace(onCreateMarker, onCreateReplacement, 1)
+        }
         source.writeText(text)
     }
 }
