@@ -36,7 +36,7 @@ class MainActivity : Activity() {
     private lateinit var libraryPanel: LinearLayout
     private lateinit var readerPanel: LinearLayout
     private lateinit var libraryList: LinearLayout
-    private lateinit var emptyLibrary: TextView
+    private lateinit var emptyLibrary: LinearLayout
 
     private var renderer: PdfRenderer? = null
     private var descriptor: ParcelFileDescriptor? = null
@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private var currentBitmap: Bitmap? = null
     private var zoom = 1f
     private var rotation = 0f
+    private var currentUri: Uri? = null
 
     private val prefs by lazy { getSharedPreferences(PREFS, MODE_PRIVATE) }
 
@@ -58,61 +59,64 @@ class MainActivity : Activity() {
     private fun buildUi() {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(244, 246, 250))
+            setBackgroundColor(Color.rgb(246, 247, 251))
         }
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(10), dp(10), dp(10))
-            background(Color.WHITE, 0f)
+            setPadding(dp(16), dp(12), dp(12), dp(12))
+            background(Color.WHITE, 0)
         }
-
         val logo = TextView(this).apply {
             text = "U"
             textSize = 22f
             gravity = Gravity.CENTER
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-            background(Color.rgb(69, 57, 190), 14f)
+            background(Color.rgb(67, 56, 180), 14)
+            contentDescription = "Universal PDF Reader logo"
         }
-        header.addView(logo, LinearLayout.LayoutParams(dp(44), dp(44)))
+        header.addView(logo, LinearLayout.LayoutParams(dp(46), dp(46)))
 
         val identity = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(10), 0, dp(8), 0)
+            setPadding(dp(11), 0, dp(6), 0)
         }
         titleLabel = TextView(this).apply {
             text = "Universal PDF Reader"
             textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.rgb(25, 27, 35))
+            setTextColor(Color.rgb(28, 29, 38))
             maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }
         identity.addView(titleLabel)
         identity.addView(TextView(this).apply {
             text = "Read beautifully. Anywhere."
             textSize = 11f
-            setTextColor(Color.rgb(110, 114, 128))
+            setTextColor(Color.rgb(112, 115, 129))
         })
         header.addView(identity, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(action("LIBRARY") { showLibrary() }, LinearLayout.LayoutParams(dp(78), dp(42)))
-        header.addView(action("OPEN") { openPicker() }, LinearLayout.LayoutParams(dp(64), dp(42)))
-        header.addView(action("TOOLS") { toggleTools() }, LinearLayout.LayoutParams(dp(64), dp(42)))
+        header.addView(action("OPEN") { openPicker() }, LinearLayout.LayoutParams(dp(64), dp(42)).apply { leftMargin = dp(5) })
+        header.addView(action("TOOLS") { toggleTools() }, LinearLayout.LayoutParams(dp(64), dp(42)).apply { leftMargin = dp(5) })
         root.addView(header)
 
         searchPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background(Color.rgb(250, 250, 252), 0f)
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            background(Color.rgb(249, 249, 252), 0)
         }
         searchBox = EditText(this).apply {
             hint = "Search inside this PDF"
             textSize = 14f
             singleLine = true
+            setTextColor(Color.rgb(35, 36, 45))
+            setHintTextColor(Color.rgb(145, 147, 158))
             setPadding(dp(14), 0, dp(10), 0)
-            background(Color.WHITE, 12f)
+            background(Color.WHITE, 14)
         }
         searchPanel.addView(searchBox, LinearLayout.LayoutParams(0, dp(46), 1f))
         searchPanel.addView(action("SEARCH") { searchPdf(searchBox.text.toString()) }, LinearLayout.LayoutParams(dp(82), dp(46)).apply { leftMargin = dp(8) })
@@ -122,30 +126,30 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(dp(8), dp(7), dp(8), dp(7))
-            background(Color.WHITE, 0f)
+            background(Color.WHITE, 0)
         }
-        addTool("‹", "PREV") { showPage(currentPage - 1) }
+        addTool("‹", "PREVIOUS PAGE") { showPage(currentPage - 1) }
         addTool("−", "ZOOM OUT") { setZoom(zoom - 0.2f) }
-        addTool("FIT", "FIT") { fitPage() }
+        addTool("FIT", "FIT PAGE") { fitPage() }
         addTool("+", "ZOOM IN") { setZoom(zoom + 0.2f) }
         addTool("↻", "ROTATE") { rotation = (rotation + 90f) % 360f; applyTransform() }
-        addTool("SHARE", "SHARE") { sharePdf() }
-        addTool("›", "NEXT") { showPage(currentPage + 1) }
+        addTool("SHARE", "SHARE PDF") { sharePdf() }
+        addTool("›", "NEXT PAGE") { showPage(currentPage + 1) }
         root.addView(toolsPanel)
 
         readerPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background(Color.rgb(226, 228, 234), 0f)
+            background(Color.rgb(229, 231, 237), 0)
         }
         val viewer = LinearLayout(this).apply {
             gravity = Gravity.CENTER
-            setPadding(dp(18), dp(16), dp(18), dp(16))
-            background(Color.rgb(226, 228, 234), 0f)
+            setPadding(dp(18), dp(18), dp(18), dp(12))
+            background(Color.rgb(229, 231, 237), 0)
         }
         pageImage = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
             setBackgroundColor(Color.WHITE)
-            elevation = dp(5).toFloat()
+            elevation = dp(6).toFloat()
             contentDescription = "PDF page"
         }
         viewer.addView(pageImage, LinearLayout.LayoutParams(-1, -1))
@@ -154,9 +158,10 @@ class MainActivity : Activity() {
             text = "No document open"
             gravity = Gravity.CENTER
             textSize = 12f
-            setTextColor(Color.rgb(88, 91, 103))
-            setPadding(dp(8), dp(8), dp(8), dp(10))
-            background(Color.WHITE, 0f)
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(78, 81, 94))
+            setPadding(dp(8), dp(9), dp(8), dp(11))
+            background(Color.WHITE, 0)
         }
         readerPanel.addView(pageLabel)
         root.addView(readerPanel, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -169,74 +174,105 @@ class MainActivity : Activity() {
     private fun buildLibraryPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(20), dp(18), dp(20))
-            background(Color.rgb(244, 246, 250), 0f)
+            setPadding(dp(18), dp(20), dp(18), dp(14))
+            background(Color.rgb(246, 247, 251), 0)
         }
-        panel.addView(TextView(this).apply {
+        val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val heading = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        heading.addView(TextView(this).apply {
             text = "Your Library"
-            textSize = 28f
+            textSize = 29f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.rgb(25, 27, 35))
+            setTextColor(Color.rgb(27, 29, 38))
         })
-        panel.addView(TextView(this).apply {
-            text = "Keep your PDFs close and pick up where you left off."
-            textSize = 13f
-            setTextColor(Color.rgb(105, 109, 123))
-            setPadding(0, dp(3), 0, dp(16))
+        heading.addView(TextView(this).apply {
+            text = "Your reading space, organised."
+            textSize = 12f
+            setTextColor(Color.rgb(112, 115, 129))
+            setPadding(0, dp(2), 0, 0)
         })
+        titleRow.addView(heading, LinearLayout.LayoutParams(0, -2, 1f))
+        titleRow.addView(action("OPEN PDF") { openPicker() }, LinearLayout.LayoutParams(dp(100), dp(44)))
+        panel.addView(titleRow)
 
-        val quick = LinearLayout(this).apply {
+        val accent = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            background(Color.WHITE, 16f)
-            elevation = dp(2).toFloat()
+            setPadding(dp(15), dp(13), dp(15), dp(13))
+            background(Color.rgb(238, 236, 252), 16)
         }
-        val quickText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        quickText.addView(TextView(this).apply {
-            text = "Open a new PDF"
-            textSize = 15f
+        val mark = TextView(this).apply {
+            text = "U"
+            textSize = 18f
+            gravity = Gravity.CENTER
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.rgb(35, 37, 47))
+            setTextColor(Color.WHITE)
+            background(Color.rgb(67, 56, 180), 12)
+        }
+        accent.addView(mark, LinearLayout.LayoutParams(dp(42), dp(42)))
+        val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(11), 0, dp(8), 0) }
+        text.addView(TextView(this).apply {
+            text = "Continue reading"
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(43, 40, 76))
         })
-        quickText.addView(TextView(this).apply {
-            text = "Browse files on your device"
+        text.addView(TextView(this).apply {
+            text = "Open your latest document and continue where you stopped."
             textSize = 11f
-            setTextColor(Color.rgb(112, 115, 128))
+            setTextColor(Color.rgb(93, 90, 119))
         })
-        quick.addView(quickText, LinearLayout.LayoutParams(0, -2, 1f))
-        quick.addView(action("OPEN PDF") { openPicker() }, LinearLayout.LayoutParams(dp(94), dp(44)))
-        panel.addView(quick)
+        accent.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
+        panel.addView(accent, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
 
         panel.addView(TextView(this).apply {
             text = "RECENT DOCUMENTS"
             textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.rgb(105, 108, 122))
-            setPadding(dp(2), dp(22), 0, dp(8))
+            setTextColor(Color.rgb(103, 106, 120))
+            setPadding(dp(2), dp(22), 0, dp(9))
         })
-        val scroll = ScrollView(this).apply { isFillViewport = true }
+        val scroll = ScrollView(this).apply { isFillViewport = true; clipToPadding = false }
         libraryList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll.addView(libraryList)
         panel.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        emptyLibrary = TextView(this).apply {
-            text = "Your library is empty.\nOpen a PDF and it will appear here."
-            textSize = 14f
+
+        emptyLibrary = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(105, 108, 122))
-            setPadding(dp(20), dp(40), dp(20), dp(40))
+            setPadding(dp(24), dp(40), dp(24), dp(40))
         }
+        val emptyIcon = TextView(this).apply {
+            text = "PDF"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            background(Color.rgb(67, 56, 180), 16)
+        }
+        emptyLibrary.addView(emptyIcon, LinearLayout.LayoutParams(dp(64), dp(64)).apply { bottomMargin = dp(12) })
+        emptyLibrary.addView(TextView(this).apply {
+            text = "Your library is waiting"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(44, 45, 55))
+        })
+        emptyLibrary.addView(TextView(this).apply {
+            text = "Open a PDF and it will appear here automatically."
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(112, 115, 129))
+            setPadding(0, dp(4), 0, 0)
+        })
         return panel
     }
 
     private fun addTool(label: String, description: String, click: () -> Unit) {
         val button = action(label) { click() }
         button.contentDescription = description
-        button.textSize = if (label.length == 1) 20f else 10f
-        toolsPanel.addView(button, LinearLayout.LayoutParams(if (label.length > 2) dp(72) else dp(48), dp(44)).apply {
-            leftMargin = dp(3)
-            rightMargin = dp(3)
-        })
+        button.textSize = if (label.length == 1) 20f else 9f
+        toolsPanel.addView(button, LinearLayout.LayoutParams(if (label.length > 2) dp(70) else dp(46), dp(44)).apply { leftMargin = dp(3); rightMargin = dp(3) })
     }
 
     private fun action(label: String, click: () -> Unit): Button = Button(this).apply {
@@ -244,8 +280,13 @@ class MainActivity : Activity() {
         textSize = 10f
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(Color.rgb(67, 56, 180))
-        background(Color.rgb(244, 243, 252), 11f)
+        background(Color.rgb(241, 240, 251), 11)
         setPadding(0, 0, 0, 0)
+        minHeight = 0
+        minimumHeight = 0
+        minWidth = 0
+        minimumWidth = 0
+        stateListAnimator = null
         setOnClickListener { click() }
     }
 
@@ -278,41 +319,51 @@ class MainActivity : Activity() {
             libraryList.addView(emptyLibrary)
             return
         }
-        entries.forEach { entry ->
+        entries.forEachIndexed { index, entry ->
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(14), dp(12), dp(10), dp(12))
-                background(Color.WHITE, 16f)
+                setPadding(dp(11), dp(11), dp(9), dp(11))
+                background(Color.WHITE, 17)
                 elevation = dp(2).toFloat()
             }
-            card.addView(TextView(this).apply {
+            val cover = TextView(this).apply {
                 text = "PDF"
                 textSize = 10f
                 gravity = Gravity.CENTER
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Color.WHITE)
-                background(Color.rgb(67, 56, 180), 10f)
-            }, LinearLayout.LayoutParams(dp(48), dp(48)))
+                background(if (index == 0) Color.rgb(67, 56, 180) else Color.rgb(88, 84, 157), 12)
+            }
+            card.addView(cover, LinearLayout.LayoutParams(dp(58), dp(68)))
+
             val info = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), 0, dp(8), 0)
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), 0, dp(7), 0)
             }
             info.addView(TextView(this).apply {
                 text = entry.first
                 textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.rgb(35, 37, 47))
+                setTextColor(Color.rgb(35, 36, 45))
                 maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
             })
+            val page = getSavedPage(entry.second)
             info.addView(TextView(this).apply {
-                text = "PDF document"
+                text = if (page > 0) "Continue • page ${page + 1}" else "PDF document"
                 textSize = 11f
-                setTextColor(Color.rgb(112, 115, 128))
+                setTextColor(Color.rgb(116, 118, 131))
+                setPadding(0, dp(3), 0, 0)
             })
             card.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
-            card.addView(action("OPEN") { openLibraryEntry(entry.second) }, LinearLayout.LayoutParams(dp(68), dp(42)))
-            libraryList.addView(card, LinearLayout.LayoutParams(-1, dp(76)).apply { bottomMargin = dp(10) })
+
+            val open = action("OPEN") { openLibraryEntry(entry.second) }
+            open.contentDescription = "Open ${entry.first}"
+            card.addView(open, LinearLayout.LayoutParams(dp(65), dp(42)))
+
+            libraryList.addView(card, LinearLayout.LayoutParams(-1, dp(90)).apply { bottomMargin = dp(10) })
         }
     }
 
@@ -329,12 +380,16 @@ class MainActivity : Activity() {
         val safeName = name.replace(FIELD_SEPARATOR, " ").replace(ENTRY_SEPARATOR, " ")
         val entries = loadLibrary().filterNot { it.second == uri.toString() }.toMutableList()
         entries.add(0, safeName to uri.toString())
-        prefs.edit().putString(KEY_LIBRARY, entries.take(20).joinToString(ENTRY_SEPARATOR) { "${it.first}$FIELD_SEPARATOR${it.second}" }).apply()
+        prefs.edit().putString(KEY_LIBRARY, entries.take(30).joinToString(ENTRY_SEPARATOR) { "${it.first}$FIELD_SEPARATOR${it.second}" }).apply()
     }
 
-    private fun openLibraryEntry(uriString: String) {
-        openPdf(Uri.parse(uriString))
+    private fun getSavedPage(uri: String): Int = prefs.getInt(PAGE_PREFIX + uri.hashCode(), 0)
+
+    private fun savePage(uri: Uri, page: Int) {
+        prefs.edit().putInt(PAGE_PREFIX + uri.toString().hashCode(), page).apply()
     }
+
+    private fun openLibraryEntry(uriString: String) = openPdf(Uri.parse(uriString), getSavedPage(uriString))
 
     private fun openPicker() {
         startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -354,26 +409,26 @@ class MainActivity : Activity() {
         }
         val name = uri.lastPathSegment?.substringAfterLast('/') ?: "Untitled PDF"
         rememberInLibrary(uri, name)
-        openPdf(uri)
+        openPdf(uri, 0)
     }
 
-    private fun openPdf(uri: Uri) {
+    private fun openPdf(uri: Uri, requestedPage: Int = 0) {
         try {
             closePdf()
             val destination = File.createTempFile("reader_", ".pdf", cacheDir)
-            contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(destination).use { output -> input.copyTo(output) }
-            } ?: throw IllegalStateException("Unable to read PDF")
+            contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(destination).use { output -> input.copyTo(output) } }
+                ?: throw IllegalStateException("Unable to read PDF")
             pdfFile = destination
+            currentUri = uri
             descriptor = ParcelFileDescriptor.open(destination, ParcelFileDescriptor.MODE_READ_ONLY)
             renderer = PdfRenderer(descriptor!!)
-            currentPage = 0
+            currentPage = requestedPage.coerceIn(0, renderer!!.pageCount - 1)
             zoom = 1f
             rotation = 0f
             titleLabel.text = uri.lastPathSegment?.substringAfterLast('/') ?: "Universal PDF Reader"
             searchBox.setText("")
             showReader()
-            showPage(0)
+            showPage(currentPage)
         } catch (e: Exception) {
             toast("Could not open PDF: ${e.message ?: "unknown error"}")
         }
@@ -394,6 +449,7 @@ class MainActivity : Activity() {
             currentBitmap = bitmap
             currentPage = index
             pageImage.setImageBitmap(bitmap)
+            currentUri?.let { savePage(it, index) }
             applyTransform()
             updateLabel()
         } catch (e: Exception) {
@@ -403,14 +459,11 @@ class MainActivity : Activity() {
 
     private fun setZoom(value: Float) {
         zoom = value.coerceIn(0.5f, 3f)
-        applyTransform()
-        updateLabel()
+        applyTransform(); updateLabel()
     }
 
     private fun fitPage() {
-        zoom = 1f
-        applyTransform()
-        updateLabel()
+        zoom = 1f; applyTransform(); updateLabel()
     }
 
     private fun applyTransform() {
@@ -421,7 +474,7 @@ class MainActivity : Activity() {
 
     private fun updateLabel() {
         val r = renderer ?: return
-        pageLabel.text = "Page ${currentPage + 1} of ${r.pageCount}  •  ${(zoom * 100).toInt()}%"
+        pageLabel.text = "Page ${currentPage + 1} of ${r.pageCount}   •   ${(zoom * 100).toInt()}%"
     }
 
     private fun searchPdf(query: String) {
@@ -434,20 +487,12 @@ class MainActivity : Activity() {
                     val stripper = PDFTextStripper()
                     var found = -1
                     for (page in 1..document.numberOfPages) {
-                        stripper.startPage = page
-                        stripper.endPage = page
-                        if (stripper.getText(document).contains(normalized, ignoreCase = true)) {
-                            found = page - 1
-                            break
-                        }
+                        stripper.startPage = page; stripper.endPage = page
+                        if (stripper.getText(document).contains(normalized, ignoreCase = true)) { found = page - 1; break }
                     }
-                    runOnUiThread {
-                        if (found >= 0) showPage(found) else toast("No matches found")
-                    }
+                    runOnUiThread { if (found >= 0) showPage(found) else toast("No matches found") }
                 }
-            } catch (e: Exception) {
-                runOnUiThread { toast("Search failed: ${e.message ?: "unknown error"}") }
-            }
+            } catch (e: Exception) { runOnUiThread { toast("Search failed: ${e.message ?: "unknown error"}") } }
         }.start()
     }
 
@@ -456,48 +501,34 @@ class MainActivity : Activity() {
         try {
             val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                type = "application/pdf"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }, "Share PDF"))
-        } catch (e: Exception) {
-            toast("Unable to share PDF")
-        }
+        } catch (_: Exception) { toast("Unable to share PDF") }
     }
 
     private fun closePdf() {
         try { renderer?.close() } catch (_: Exception) { }
         try { descriptor?.close() } catch (_: Exception) { }
-        renderer = null
-        descriptor = null
-        currentBitmap?.recycle()
-        currentBitmap = null
-        pdfFile?.delete()
-        pdfFile = null
+        renderer = null; descriptor = null
+        currentBitmap?.recycle(); currentBitmap = null
+        pdfFile?.delete(); pdfFile = null; currentUri = null
     }
 
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
-    private fun background(color: Int, radius: Int) = android.graphics.drawable.GradientDrawable().apply {
-        setColor(color)
-        cornerRadius = dp(radius).toFloat()
-    }
+    private fun background(color: Int, radius: Int) = android.graphics.drawable.GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
 
-    private fun View.background(color: Int, radius: Int) {
-        background = this@MainActivity.background(color, radius)
-    }
+    private fun View.background(color: Int, radius: Int) { background = this@MainActivity.background(color, radius) }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
-    override fun onDestroy() {
-        closePdf()
-        super.onDestroy()
-    }
+    override fun onDestroy() { closePdf(); super.onDestroy() }
 
     companion object {
         private const val REQUEST_OPEN = 42
         private const val PREFS = "universal_pdf_reader"
         private const val KEY_LIBRARY = "library"
+        private const val PAGE_PREFIX = "page_"
         private const val ENTRY_SEPARATOR = "\u001e"
         private const val FIELD_SEPARATOR = "\u001f"
     }
