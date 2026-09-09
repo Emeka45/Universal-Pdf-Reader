@@ -27,7 +27,6 @@ dependencies {
 }
 
 // Normalize the redesigned activity before Android's Kotlin compilation task.
-// This runs from preBuild, which is guaranteed to execute before compilation.
 tasks.named("preBuild") {
     doLast {
         val source = file("src/main/java/com/coeric/universalpdfreader/MainActivity.kt")
@@ -37,10 +36,8 @@ tasks.named("preBuild") {
         }
         text = text.replace("singleLine = true", "setSingleLine(true)")
 
-        // Android back/swipe-back should leave the PDF reader and return to the
-        // in-app library instead of finishing the entire reader Activity.
-        // The API 33+ callback handles gesture navigation; onBackPressed keeps
-        // the same behavior on older Android versions.
+        // Android back/swipe-back returns from the reader to the in-app library
+        // instead of finishing the entire Activity.
         if (!text.contains("__universalPdfReaderBackNavigation")) {
             val insertion = """
 
@@ -61,19 +58,6 @@ tasks.named("preBuild") {
             if (classEnd >= 0) {
                 text = text.substring(0, classEnd) + "\n" + insertion + text.substring(classEnd)
             }
-
-            val onCreateMarker = "        showLibrary()\n"
-            val onCreateReplacement = """
-        showLibrary()
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            onBackInvokedDispatcher.registerOnBackInvokedCallback(
-                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT
-            ) {
-                __universalPdfReaderBackNavigation()
-            }
-        }
-""".trimIndent() + "\n"
-            text = text.replace(onCreateMarker, onCreateReplacement, 1)
         }
         source.writeText(text)
     }
