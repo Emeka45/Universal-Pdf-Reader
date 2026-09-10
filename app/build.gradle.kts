@@ -27,7 +27,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-ads:25.4.0")
 }
 
-// Normalize and patch the activity before Android's Kotlin compilation task.
+// Temporary source normalizer used by the CI build while the legacy Activity is being consolidated.
 tasks.named("preBuild") {
     doLast {
         val source = file("src/main/java/com/coeric/universalpdfreader/MainActivity.kt")
@@ -38,30 +38,24 @@ tasks.named("preBuild") {
         }
         text = text.replace("singleLine = true", "setSingleLine(true)")
 
-        // AdMob imports and initialization. The App ID is configured in AndroidManifest.xml.
         if (!text.contains("com.google.android.gms.ads.MobileAds")) {
             text = text.replace(
                 "import android.widget.Toast\n",
-                "import android.widget.Toast\nimport com.google.android.gms.ads.AdRequest\nimport com.google.android.gms.ads.AdSize\nimport com.google.android.gms.ads.AdView\nimport com.google.android.gms.ads.MobileAds\n"
-            )
-        }
-        if (!text.contains("__universalPdfReaderAdMobInitialized")) {
-            text = text.replace(
-                "PDFBoxResourceLoader.init(applicationContext)\n        buildUi()",
-                "PDFBoxResourceLoader.init(applicationContext)\n        MobileAds.initialize(this)\n        buildUi()"
-            )
-            text = text.replace(
-                "class MainActivity : Activity() {",
-                "class MainActivity : Activity() {\n    private var __universalPdfReaderInterstitial: com.google.android.gms.ads.interstitial.InterstitialAd? = null\n    private var __universalPdfReaderOpenCount = 0"
-            )
-            text = text.replace(
-                "import com.google.android.gms.ads.MobileAds\n",
-                "import com.google.android.gms.ads.MobileAds\nimport com.google.android.gms.ads.FullScreenContentCallback\nimport com.google.android.gms.ads.LoadAdError\nimport com.google.android.gms.ads.interstitial.InterstitialAd\nimport com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback\n"
+                "import android.widget.Toast\nimport com.google.android.gms.ads.AdRequest\nimport com.google.android.gms.ads.AdSize\nimport com.google.android.gms.ads.AdView\nimport com.google.android.gms.ads.MobileAds\nimport com.google.android.gms.ads.FullScreenContentCallback\nimport com.google.android.gms.ads.LoadAdError\nimport com.google.android.gms.ads.interstitial.InterstitialAd\nimport com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback\n"
             )
         }
 
-        // Add the supplied production banner ad unit to the library only.
-        // The PDF reading surface remains ad-free.
+        if (!text.contains("__universalPdfReaderAdMobInitialized")) {
+            text = text.replace(
+                "PDFBoxResourceLoader.init(applicationContext)\n        buildUi()",
+                "PDFBoxResourceLoader.init(applicationContext)\n        MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()"
+            )
+            text = text.replace(
+                "class MainActivity : Activity() {",
+                "class MainActivity : Activity() {\n    private var __universalPdfReaderInterstitial: InterstitialAd? = null\n    private var __universalPdfReaderOpenCount = 0"
+            )
+        }
+
         if (!text.contains("__universalPdfReaderAdMobBanner")) {
             val bannerCode = """
 
@@ -83,8 +77,6 @@ tasks.named("preBuild") {
             }
         }
 
-        // Load the supplied production interstitial ad unit. It is shown at a natural
-        // break after every third successful PDF open, then immediately preloads again.
         if (!text.contains("__universalPdfReaderLoadInterstitial")) {
             val interstitialCode = """
 
@@ -104,7 +96,6 @@ tasks.named("preBuild") {
                         }
                     }
                 }
-
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     __universalPdfReaderInterstitial = null
                 }
@@ -127,12 +118,11 @@ tasks.named("preBuild") {
                 text = text.substring(0, classEnd) + "\n" + interstitialCode + text.substring(classEnd)
             }
             text = text.replace(
-                "MobileAds.initialize(this)\n        buildUi()",
+                "MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()",
                 "MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()"
             )
         }
 
-        // Show the interstitial only after a successful PDF open, at a natural break.
         if (!text.contains("__universalPdfReaderMaybeShowInterstitial()")) {
             val candidates = listOf(
                 "        showReader()\n        showPage(0)",
@@ -148,8 +138,7 @@ tasks.named("preBuild") {
             }
         }
 
-        // Android back/swipe-back returns from the reader to the in-app library
-        // instead of finishing the entire Activity.
+        // Back navigation: leaving the reader returns to the in-app library instead of closing the app.
         if (!text.contains("__universalPdfReaderBackNavigation")) {
             val insertion = """
 
@@ -172,7 +161,7 @@ tasks.named("preBuild") {
             }
         }
 
-        // Replace the original search implementation with a more reliable search.
+        // Replace the original search implementation with a more reliable page-by-page search.
         val searchStart = text.indexOf("    private fun searchPdf(query: String) {")
         if (searchStart >= 0) {
             val searchEnd = text.indexOf("\n    private fun ", searchStart + 10)
@@ -186,38 +175,24 @@ tasks.named("preBuild") {
             searchBox.requestFocus()
             return
         }
-
         Thread {
             var foundPage = -1
             var totalPages = 0
             try {
                 PDDocument.load(file).use { document ->
                     totalPages = document.numberOfPages
-                    if (totalPages == 0) {
-                        runOnUiThread { toast("This PDF has no pages") }
-                        return@use
-                    }
-
-                    val stripper = PDFTextStripper().apply {
-                        sortByPosition = true
-                    }
-
+                    val stripper = PDFTextStripper().apply { sortByPosition = true }
                     for (offset in 0 until totalPages) {
                         val pageIndex = (currentPage + offset) % totalPages
                         stripper.startPage = pageIndex + 1
                         stripper.endPage = pageIndex + 1
-
-                        val pageText = stripper.getText(document)
-                            .replace(Regex("\\s+"), " ")
-                            .trim()
-
+                        val pageText = stripper.getText(document).replace(Regex("\\s+"), " ").trim()
                         if (pageText.contains(normalized, ignoreCase = true)) {
                             foundPage = pageIndex
                             break
                         }
                     }
                 }
-
                 runOnUiThread {
                     if (foundPage >= 0) {
                         showPage(foundPage)
@@ -227,9 +202,7 @@ tasks.named("preBuild") {
                     }
                 }
             } catch (e: Exception) {
-                runOnUiThread {
-                    toast("Search failed: " + (e.message ?: "unable to read this PDF"))
-                }
+                runOnUiThread { toast("Search failed: " + (e.message ?: "unable to read this PDF")) }
             }
         }.start()
     }
@@ -237,6 +210,47 @@ tasks.named("preBuild") {
                 text = text.substring(0, searchStart) + improvedSearch + text.substring(searchEnd)
             }
         }
+
+        // ===== Reader UX upgrade =====
+        // The old touch handler supported pan/pinch only. At normal zoom, a horizontal
+        // swipe now changes pages; vertical movement remains ignored so reading feels natural.
+        if (!text.contains("__universalPdfReaderSwipeStartX")) {
+            text = text.replace(
+                "    private var isPinching = false\n",
+                "    private var isPinching = false\n    private var __universalPdfReaderSwipeStartX = 0f\n    private var __universalPdfReaderSwipeStartY = 0f\n"
+            )
+            text = text.replace(
+                "                lastTouchX = event.x\n                lastTouchY = event.y\n                isPanning = false",
+                "                lastTouchX = event.x\n                lastTouchY = event.y\n                __universalPdfReaderSwipeStartX = event.x\n                __universalPdfReaderSwipeStartY = event.y\n                isPanning = false"
+            )
+            val oldUp = """            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                pinchDistance = 0f
+                isPinching = false
+                isPanning = false
+                return true
+            }"""
+            val newUp = """            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (event.actionMasked == MotionEvent.ACTION_UP && zoom <= 1.01f && !isPanning && !isPinching) {
+                    val dx = event.x - __universalPdfReaderSwipeStartX
+                    val dy = event.y - __universalPdfReaderSwipeStartY
+                    if (kotlin.math.abs(dx) >= dp(72) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.35f) {
+                        if (dx < 0f) showPage(currentPage + 1) else showPage(currentPage - 1)
+                    }
+                }
+                pinchDistance = 0f
+                isPinching = false
+                isPanning = false
+                return true
+            }"""
+            text = text.replace(oldUp, newUp)
+        }
+
+        // Stronger visual hierarchy: richer accent surfaces, softer reader canvas and clearer controls.
+        text = text.replace("Color.rgb(246, 247, 251)", "Color.rgb(244, 246, 252)")
+        text = text.replace("Color.rgb(229, 231, 237)", "Color.rgb(222, 226, 238)")
+        text = text.replace("Color.rgb(241, 240, 251)", "Color.rgb(232, 229, 252)")
+        text = text.replace("Color.rgb(238, 236, 252)", "Color.rgb(226, 222, 252)")
+        text = text.replace("text = \"Read beautifully. Anywhere.\"", "text = \"Read. Search. Swipe.\"")
 
         source.writeText(text)
     }
