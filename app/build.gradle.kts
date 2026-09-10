@@ -37,14 +37,14 @@ tasks.named("preBuild") {
         if (!text.contains("com.google.android.gms.ads.MobileAds")) {
             text = text.replace(
                 "import android.widget.Toast\n",
-                "import android.widget.Toast\nimport com.google.android.gms.ads.AdRequest\nimport com.google.android.gms.ads.AdSize\nimport com.google.android.gms.ads.AdView\nimport com.google.android.gms.ads.MobileAds\nimport com.google.android.gms.ads.FullScreenContentCallback\nimport com.google.android.gms.ads.LoadAdError\nimport com.google.android.gms.ads.interstitial.InterstitialAd\nimport com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback\n"
+                "import android.widget.Toast\nimport android.widget.FrameLayout\nimport com.google.android.gms.ads.AdRequest\nimport com.google.android.gms.ads.AdSize\nimport com.google.android.gms.ads.AdView\nimport com.google.android.gms.ads.MobileAds\nimport com.google.android.gms.ads.AdLoader\nimport com.google.android.gms.ads.AdListener\nimport com.google.android.gms.ads.FullScreenContentCallback\nimport com.google.android.gms.ads.LoadAdError\nimport com.google.android.gms.ads.interstitial.InterstitialAd\nimport com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback\nimport com.google.android.gms.ads.nativead.MediaView\nimport com.google.android.gms.ads.nativead.NativeAd\nimport com.google.android.gms.ads.nativead.NativeAdView\n"
             )
         }
 
         if (!text.contains("__universalPdfReaderAdMobInitialized")) {
             text = text.replace(
                 "PDFBoxResourceLoader.init(applicationContext)\n        buildUi()",
-                "PDFBoxResourceLoader.init(applicationContext)\n        MobileAds.initialize(this)\n        buildUi()"
+                "PDFBoxResourceLoader.init(applicationContext)\n        MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()"
             )
             text = text.replace(
                 "class MainActivity : Activity() {",
@@ -52,7 +52,12 @@ tasks.named("preBuild") {
             )
             text = text.replace(
                 "private var __universalPdfReaderOpenCount = 0",
-                "private var __universalPdfReaderOpenCount = 0\n    private val __universalPdfReaderAdMobInitialized = true"
+                "private var __universalPdfReaderOpenCount = 0\n    private val __universalPdfReaderAdMobInitialized = true\n    private var __universalPdfReaderNativeAd: NativeAd? = null"
+            )
+        } else if (!text.contains("private var __universalPdfReaderNativeAd: NativeAd?")) {
+            text = text.replace(
+                "private val __universalPdfReaderAdMobInitialized = true",
+                "private val __universalPdfReaderAdMobInitialized = true\n    private var __universalPdfReaderNativeAd: NativeAd? = null"
             )
         }
 
@@ -73,6 +78,158 @@ tasks.named("preBuild") {
             val marker = "        return panel"
             val markerIndex = text.indexOf(marker)
             if (markerIndex >= 0) text = text.substring(0, markerIndex) + bannerCode + "\n" + text.substring(markerIndex)
+        }
+
+        if (!text.contains("__universalPdfReaderNativeAdContainer")) {
+            val nativeAdCode = """
+
+        val __universalPdfReaderNativeAdContainer = FrameLayout(this).apply {
+            setPadding(dp(2), dp(10), dp(2), dp(4))
+            background(Color.WHITE, 18)
+            contentDescription = "Sponsored content"
+        }
+        panel.addView(__universalPdfReaderNativeAdContainer, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(12)
+        })
+        __universalPdfReaderLoadNativeAd(__universalPdfReaderNativeAdContainer)
+""".trimIndent()
+            val marker = "        return panel"
+            val markerIndex = text.indexOf(marker)
+            if (markerIndex >= 0) text = text.substring(0, markerIndex) + nativeAdCode + "\n" + text.substring(markerIndex)
+        }
+
+        if (!text.contains("private fun __universalPdfReaderLoadNativeAd")) {
+            val nativeMethods = """
+
+    private fun __universalPdfReaderLoadNativeAd(container: FrameLayout) {
+        val adLoader = AdLoader.Builder(this, "ca-app-pub-2020382054968819/3232790650")
+            .forNativeAd { nativeAd ->
+                if (isFinishing || isDestroyed) {
+                    nativeAd.destroy()
+                    return@forNativeAd
+                }
+                runOnUiThread {
+                    __universalPdfReaderNativeAd?.destroy()
+                    __universalPdfReaderNativeAd = nativeAd
+
+                    val adView = NativeAdView(this)
+                    val card = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(dp(12), dp(10), dp(12), dp(10))
+                    }
+
+                    val attributionRow = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    attributionRow.addView(TextView(this).apply {
+                        text = "Ad"
+                        textSize = 10f
+                        typeface = Typeface.DEFAULT_BOLD
+                        setTextColor(Color.rgb(78, 63, 205))
+                        background(Color.rgb(232, 229, 252), 6)
+                        setPadding(dp(7), dp(3), dp(7), dp(3))
+                    })
+                    attributionRow.addView(TextView(this).apply {
+                        text = "Sponsored"
+                        textSize = 10f
+                        setTextColor(Color.rgb(112, 115, 129))
+                        setPadding(dp(7), 0, 0, 0)
+                    })
+                    card.addView(attributionRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+
+                    val topRow = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    val icon = ImageView(this).apply {
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                    }
+                    topRow.addView(icon, LinearLayout.LayoutParams(dp(48), dp(48)))
+
+                    val textColumn = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(dp(10), 0, 0, 0)
+                    }
+                    val headline = TextView(this).apply {
+                        textSize = 15f
+                        typeface = Typeface.DEFAULT_BOLD
+                        setTextColor(Color.rgb(30, 31, 40))
+                        maxLines = 2
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                    }
+                    val advertiser = TextView(this).apply {
+                        textSize = 10f
+                        setTextColor(Color.rgb(112, 115, 129))
+                        setPadding(0, dp(3), 0, 0)
+                    }
+                    textColumn.addView(headline)
+                    textColumn.addView(advertiser)
+                    topRow.addView(textColumn, LinearLayout.LayoutParams(0, -2, 1f))
+                    card.addView(topRow)
+
+                    val media = MediaView(this).apply {
+                        setBackgroundColor(Color.rgb(245, 246, 250))
+                    }
+                    card.addView(media, LinearLayout.LayoutParams(-1, dp(150)).apply { topMargin = dp(10) })
+
+                    val body = TextView(this).apply {
+                        textSize = 12f
+                        setTextColor(Color.rgb(78, 81, 94))
+                        maxLines = 3
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        setPadding(0, dp(9), 0, 0)
+                    }
+                    card.addView(body)
+
+                    val cta = Button(this).apply {
+                        textSize = 11f
+                        typeface = Typeface.DEFAULT_BOLD
+                        setTextColor(Color.WHITE)
+                        background(Color.rgb(78, 63, 205), 10)
+                        setPadding(dp(12), 0, dp(12), 0)
+                        minHeight = 0
+                        minimumHeight = 0
+                    }
+                    card.addView(cta, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(10) })
+
+                    adView.addView(card, FrameLayout.LayoutParams(-1, -2))
+                    adView.headlineView = headline
+                    adView.bodyView = body
+                    adView.advertiserView = advertiser
+                    adView.iconView = icon
+                    adView.mediaView = media
+                    adView.callToActionView = cta
+                    adView.setNativeAd(nativeAd)
+
+                    container.removeAllViews()
+                    container.addView(adView, FrameLayout.LayoutParams(-1, -2))
+                }
+            }
+            .withAdListener(object : AdListener() {
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    container.visibility = View.GONE
+                }
+            })
+            .build()
+        adLoader.loadAd(AdRequest.Builder().build())
+    }
+""".trimIndent()
+            val classEnd = text.lastIndexOf("\n}")
+            if (classEnd >= 0) text = text.substring(0, classEnd) + "\n" + nativeMethods + text.substring(classEnd)
+        }
+
+        if (!text.contains("__universalPdfReaderNativeAd?.destroy()")) {
+            val destroyMethod = """
+
+    override fun onDestroy() {
+        __universalPdfReaderNativeAd?.destroy()
+        __universalPdfReaderNativeAd = null
+        super.onDestroy()
+    }
+""".trimIndent()
+            val classEnd = text.lastIndexOf("\n}")
+            if (classEnd >= 0) text = text.substring(0, classEnd) + "\n" + destroyMethod + text.substring(classEnd)
         }
 
         if (!text.contains("private fun __universalPdfReaderLoadInterstitial")) {
@@ -114,7 +271,7 @@ tasks.named("preBuild") {
             val classEnd = text.lastIndexOf("\n}")
             if (classEnd >= 0) text = text.substring(0, classEnd) + "\n" + interstitialCode + text.substring(classEnd)
             text = text.replace(
-                "MobileAds.initialize(this)\n        buildUi()",
+                "MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()",
                 "MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()"
             )
         }
