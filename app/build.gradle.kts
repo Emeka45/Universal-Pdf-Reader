@@ -190,6 +190,7 @@ tasks.named("preBuild") {
             }
         }
 
+        // Improve swipe navigation while keeping pinch zoom and one-finger panning.
         if (!text.contains("__universalPdfReaderSwipeStartX")) {
             text = text.replace(
                 "    private var isPinching = false\n",
@@ -221,12 +222,20 @@ tasks.named("preBuild") {
             text = text.replace(oldUp, newUp)
         }
 
-        // Visual refresh: cooler reader canvas, stronger accent surfaces, and clearer branding.
+        // Premium visual pass: stronger indigo identity, cleaner surfaces, and a richer reader canvas.
         text = text.replace("Color.rgb(246, 247, 251)", "Color.rgb(244, 246, 252)")
-        text = text.replace("Color.rgb(229, 231, 237)", "Color.rgb(222, 226, 238)")
+        text = text.replace("Color.rgb(229, 231, 237)", "Color.rgb(218, 222, 236)")
         text = text.replace("Color.rgb(241, 240, 251)", "Color.rgb(232, 229, 252)")
         text = text.replace("Color.rgb(238, 236, 252)", "Color.rgb(226, 222, 252)")
+        text = text.replace("Color.rgb(67, 56, 180)", "Color.rgb(78, 63, 205)")
         text = text.replace("text = \"Read beautifully. Anywhere.\"", "text = \"Read. Search. Swipe.\"")
+
+        // Render PDF pages in print-quality mode for stronger color/graphics fidelity.
+        text = text.replace(
+            "PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY",
+            "PdfRenderer.Page.RENDER_MODE_FOR_PRINT"
+        )
+        text = text.replace("coerceIn(900, 2200)", "coerceIn(1100, 2200)")
 
         source.writeText(text)
     }
