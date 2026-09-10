@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -24,6 +25,7 @@ import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.hypot
 
 class MainActivity : Activity() {
     private lateinit var root: LinearLayout
@@ -46,6 +48,14 @@ class MainActivity : Activity() {
     private var zoom = 1f
     private var rotation = 0f
     private var currentUri: Uri? = null
+
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
+    private var pinchDistance = 0f
+    private var pinchFocusX = 0f
+    private var pinchFocusY = 0f
+    private var isPanning = false
+    private var isPinching = false
 
     private val prefs by lazy { getSharedPreferences(PREFS, MODE_PRIVATE) }
 
@@ -151,6 +161,9 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.WHITE)
             elevation = dp(6).toFloat()
             contentDescription = "PDF page"
+            pivotX = 0f
+            pivotY = 0f
+            setOnTouchListener { view, event -> handlePageTouch(view, event) }
         }
         viewer.addView(pageImage, LinearLayout.LayoutParams(-1, -1))
         readerPanel.addView(viewer, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -170,6 +183,92 @@ class MainActivity : Activity() {
         root.addView(libraryPanel, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
     }
+
+    private fun handlePageTouch(view: View, event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                lastTouchX = event.x
+                lastTouchY = event.y
+                isPanning = false
+                isPinching = false
+                return true
+            }
+
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (event.pointerCount >= 2) {
+                    pinchDistance = distance(event)
+                    pinchFocusX = midpointX(event)
+                    pinchFocusY = midpointY(event)
+                    isPinching = pinchDistance > 0f
+                    isPanning = false
+                }
+                return true
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (event.pointerCount >= 2 && pinchDistance > 0f) {
+                    val newDistance = distance(event)
+                    if (newDistance > 0f) {
+                        val factor = newDistance / pinchDistance
+                        val oldZoom = zoom
+                        val newZoom = (oldZoom * factor).coerceIn(0.5f, 5f)
+                        val actualFactor = if (oldZoom > 0f) newZoom / oldZoom else 1f
+                        val focusX = midpointX(event)
+                        val focusY = midpointY(event)
+                        pageImage.translationX = focusX - (focusX - pageImage.translationX) * actualFactor
+                        pageImage.translationY = focusY - (focusY - pageImage.translationY) * actualFactor
+                        zoom = newZoom
+                        pinchDistance = newDistance
+                        updateLabel()
+                    }
+                    return true
+                }
+
+                if (event.pointerCount == 1 && zoom > 1.01f && !isPinching) {
+                    val dx = event.x - lastTouchX
+                    val dy = event.y - lastTouchY
+                    pageImage.translationX += dx
+                    pageImage.translationY += dy
+                    isPanning = true
+                    lastTouchX = event.x
+                    lastTouchY = event.y
+                }
+                return true
+            }
+
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (event.pointerCount <= 2) {
+                    pinchDistance = 0f
+                    isPinching = false
+                    lastTouchX = event.x
+                    lastTouchY = event.y
+                }
+                return true
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                pinchDistance = 0f
+                isPinching = false
+                isPanning = false
+                return true
+            }
+        }
+        return true
+    }
+
+    private fun distance(event: MotionEvent): Float {
+        if (event.pointerCount < 2) return 0f
+        return hypot(
+            event.getX(0) - event.getX(1),
+            event.getY(0) - event.getY(1)
+        )
+    }
+
+    private fun midpointX(event: MotionEvent): Float =
+        if (event.pointerCount >= 2) (event.getX(0) + event.getX(1)) / 2f else event.x
+
+    private fun midpointY(event: MotionEvent): Float =
+        if (event.pointerCount >= 2) (event.getY(0) + event.getY(1)) / 2f else event.y
 
     private fun buildLibraryPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
@@ -425,6 +524,7 @@ class MainActivity : Activity() {
             currentPage = requestedPage.coerceIn(0, renderer!!.pageCount - 1)
             zoom = 1f
             rotation = 0f
+            resetPageTransform()
             titleLabel.text = uri.lastPathSegment?.substringAfterLast('/') ?: "Universal PDF Reader"
             searchBox.setText("")
             showReader()
@@ -458,12 +558,23 @@ class MainActivity : Activity() {
     }
 
     private fun setZoom(value: Float) {
-        zoom = value.coerceIn(0.5f, 3f)
+        zoom = value.coerceIn(0.5f, 5f)
         applyTransform(); updateLabel()
     }
 
     private fun fitPage() {
-        zoom = 1f; applyTransform(); updateLabel()
+        zoom = 1f
+        resetPageTransform()
+        applyTransform()
+        updateLabel()
+    }
+
+    private fun resetPageTransform() {
+        pageImage.translationX = 0f
+        pageImage.translationY = 0f
+        pageImage.scaleX = 1f
+        pageImage.scaleY = 1f
+        pageImage.rotation = 0f
     }
 
     private fun applyTransform() {
@@ -512,24 +623,21 @@ class MainActivity : Activity() {
         renderer = null; descriptor = null
         currentBitmap?.recycle(); currentBitmap = null
         pdfFile?.delete(); pdfFile = null; currentUri = null
+        if (::pageImage.isInitialized) resetPageTransform()
     }
 
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
     private fun background(color: Int, radius: Int) = android.graphics.drawable.GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
 
-    private fun View.background(color: Int, radius: Int) { background = this@MainActivity.background(color, radius) }
-
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
-    override fun onDestroy() { closePdf(); super.onDestroy() }
-
     companion object {
-        private const val REQUEST_OPEN = 42
+        private const val REQUEST_OPEN = 1001
         private const val PREFS = "universal_pdf_reader"
         private const val KEY_LIBRARY = "library"
         private const val PAGE_PREFIX = "page_"
-        private const val ENTRY_SEPARATOR = "\u001e"
-        private const val FIELD_SEPARATOR = "\u001f"
+        private const val FIELD_SEPARATOR = "|||"
+        private const val ENTRY_SEPARATOR = "\n"
     }
 }
