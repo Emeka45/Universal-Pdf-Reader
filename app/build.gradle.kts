@@ -5,7 +5,6 @@ plugins {
 android {
     namespace = "com.coeric.universalpdfreader"
     compileSdk = 36
-
     defaultConfig {
         applicationId = "com.coeric.universalpdfreader"
         minSdk = 26
@@ -13,7 +12,6 @@ android {
         versionCode = 1
         versionName = "0.1.0"
     }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -27,12 +25,10 @@ dependencies {
     implementation("com.google.android.gms:play-services-ads:25.4.0")
 }
 
-// Temporary source normalizer used by the CI build while the legacy Activity is being consolidated.
 tasks.named("preBuild") {
     doLast {
         val source = file("src/main/java/com/coeric/universalpdfreader/MainActivity.kt")
         var text = source.readText()
-
         listOf(0, 10, 11, 12, 14, 16).forEach { value ->
             text = text.replace(", ${value}f)", ", ${value})")
         }
@@ -48,11 +44,15 @@ tasks.named("preBuild") {
         if (!text.contains("__universalPdfReaderAdMobInitialized")) {
             text = text.replace(
                 "PDFBoxResourceLoader.init(applicationContext)\n        buildUi()",
-                "PDFBoxResourceLoader.init(applicationContext)\n        MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()"
+                "PDFBoxResourceLoader.init(applicationContext)\n        MobileAds.initialize(this)\n        buildUi()"
             )
             text = text.replace(
                 "class MainActivity : Activity() {",
                 "class MainActivity : Activity() {\n    private var __universalPdfReaderInterstitial: InterstitialAd? = null\n    private var __universalPdfReaderOpenCount = 0"
+            )
+            text = text.replace(
+                "private var __universalPdfReaderOpenCount = 0",
+                "private var __universalPdfReaderOpenCount = 0\n    private val __universalPdfReaderAdMobInitialized = true"
             )
         }
 
@@ -72,12 +72,10 @@ tasks.named("preBuild") {
 """.trimIndent()
             val marker = "        return panel"
             val markerIndex = text.indexOf(marker)
-            if (markerIndex >= 0) {
-                text = text.substring(0, markerIndex) + bannerCode + "\n" + text.substring(markerIndex)
-            }
+            if (markerIndex >= 0) text = text.substring(0, markerIndex) + bannerCode + "\n" + text.substring(markerIndex)
         }
 
-        if (!text.contains("__universalPdfReaderLoadInterstitial")) {
+        if (!text.contains("private fun __universalPdfReaderLoadInterstitial")) {
             val interstitialCode = """
 
     private fun __universalPdfReaderLoadInterstitial() {
@@ -114,11 +112,9 @@ tasks.named("preBuild") {
     }
 """.trimIndent()
             val classEnd = text.lastIndexOf("\n}")
-            if (classEnd >= 0) {
-                text = text.substring(0, classEnd) + "\n" + interstitialCode + text.substring(classEnd)
-            }
+            if (classEnd >= 0) text = text.substring(0, classEnd) + "\n" + interstitialCode + text.substring(classEnd)
             text = text.replace(
-                "MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()",
+                "MobileAds.initialize(this)\n        buildUi()",
                 "MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()"
             )
         }
@@ -138,7 +134,6 @@ tasks.named("preBuild") {
             }
         }
 
-        // Back navigation: leaving the reader returns to the in-app library instead of closing the app.
         if (!text.contains("__universalPdfReaderBackNavigation")) {
             val insertion = """
 
@@ -156,12 +151,9 @@ tasks.named("preBuild") {
     }
 """.trimIndent()
             val classEnd = text.lastIndexOf("\n}")
-            if (classEnd >= 0) {
-                text = text.substring(0, classEnd) + "\n" + insertion + text.substring(classEnd)
-            }
+            if (classEnd >= 0) text = text.substring(0, classEnd) + "\n" + insertion + text.substring(classEnd)
         }
 
-        // Replace the original search implementation with a more reliable page-by-page search.
         val searchStart = text.indexOf("    private fun searchPdf(query: String) {")
         if (searchStart >= 0) {
             val searchEnd = text.indexOf("\n    private fun ", searchStart + 10)
@@ -170,11 +162,7 @@ tasks.named("preBuild") {
     private fun searchPdf(query: String) {
         val file = pdfFile ?: run { toast("Open a PDF first"); return }
         val normalized = query.trim().replace(Regex("\\s+"), " ")
-        if (normalized.isEmpty()) {
-            toast("Enter a word or phrase to search")
-            searchBox.requestFocus()
-            return
-        }
+        if (normalized.isEmpty()) { toast("Enter a word or phrase to search"); searchBox.requestFocus(); return }
         Thread {
             var foundPage = -1
             var totalPages = 0
@@ -187,23 +175,14 @@ tasks.named("preBuild") {
                         stripper.startPage = pageIndex + 1
                         stripper.endPage = pageIndex + 1
                         val pageText = stripper.getText(document).replace(Regex("\\s+"), " ").trim()
-                        if (pageText.contains(normalized, ignoreCase = true)) {
-                            foundPage = pageIndex
-                            break
-                        }
+                        if (pageText.contains(normalized, ignoreCase = true)) { foundPage = pageIndex; break }
                     }
                 }
                 runOnUiThread {
-                    if (foundPage >= 0) {
-                        showPage(foundPage)
-                        toast("Found \"" + normalized + "\" on page " + (foundPage + 1) + " of " + totalPages)
-                    } else {
-                        toast("No matches found for \"" + normalized + "\"")
-                    }
+                    if (foundPage >= 0) { showPage(foundPage); toast("Found \"" + normalized + "\" on page " + (foundPage + 1) + " of " + totalPages) }
+                    else toast("No matches found for \"" + normalized + "\"")
                 }
-            } catch (e: Exception) {
-                runOnUiThread { toast("Search failed: " + (e.message ?: "unable to read this PDF")) }
-            }
+            } catch (e: Exception) { runOnUiThread { toast("Search failed: " + (e.message ?: "unable to read this PDF")) } }
         }.start()
     }
 """.trimIndent()
@@ -211,9 +190,6 @@ tasks.named("preBuild") {
             }
         }
 
-        // ===== Reader UX upgrade =====
-        // The old touch handler supported pan/pinch only. At normal zoom, a horizontal
-        // swipe now changes pages; vertical movement remains ignored so reading feels natural.
         if (!text.contains("__universalPdfReaderSwipeStartX")) {
             text = text.replace(
                 "    private var isPinching = false\n",
@@ -245,7 +221,7 @@ tasks.named("preBuild") {
             text = text.replace(oldUp, newUp)
         }
 
-        // Stronger visual hierarchy: richer accent surfaces, softer reader canvas and clearer controls.
+        // Visual refresh: cooler reader canvas, stronger accent surfaces, and clearer branding.
         text = text.replace("Color.rgb(246, 247, 251)", "Color.rgb(244, 246, 252)")
         text = text.replace("Color.rgb(229, 231, 237)", "Color.rgb(222, 226, 238)")
         text = text.replace("Color.rgb(241, 240, 251)", "Color.rgb(232, 229, 252)")
