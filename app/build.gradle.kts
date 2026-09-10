@@ -21,6 +21,7 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation("androidx.lifecycle:lifecycle-process:2.8.3")
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     implementation("com.google.android.gms:play-services-ads:25.4.0")
 }
@@ -117,7 +118,6 @@ tasks.named("preBuild") {
                         orientation = LinearLayout.VERTICAL
                         setPadding(dp(12), dp(10), dp(12), dp(10))
                     }
-
                     val attributionRow = LinearLayout(this).apply {
                         orientation = LinearLayout.HORIZONTAL
                         gravity = Gravity.CENTER_VERTICAL
@@ -137,16 +137,12 @@ tasks.named("preBuild") {
                         setPadding(dp(7), 0, 0, 0)
                     })
                     card.addView(attributionRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
-
                     val topRow = LinearLayout(this).apply {
                         orientation = LinearLayout.HORIZONTAL
                         gravity = Gravity.CENTER_VERTICAL
                     }
-                    val icon = ImageView(this).apply {
-                        scaleType = ImageView.ScaleType.CENTER_CROP
-                    }
+                    val icon = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
                     topRow.addView(icon, LinearLayout.LayoutParams(dp(48), dp(48)))
-
                     val textColumn = LinearLayout(this).apply {
                         orientation = LinearLayout.VERTICAL
                         setPadding(dp(10), 0, 0, 0)
@@ -167,12 +163,8 @@ tasks.named("preBuild") {
                     textColumn.addView(advertiser)
                     topRow.addView(textColumn, LinearLayout.LayoutParams(0, -2, 1f))
                     card.addView(topRow)
-
-                    val media = MediaView(this).apply {
-                        setBackgroundColor(Color.rgb(245, 246, 250))
-                    }
+                    val media = MediaView(this).apply { setBackgroundColor(Color.rgb(245, 246, 250)) }
                     card.addView(media, LinearLayout.LayoutParams(-1, dp(150)).apply { topMargin = dp(10) })
-
                     val body = TextView(this).apply {
                         textSize = 12f
                         setTextColor(Color.rgb(78, 81, 94))
@@ -181,7 +173,6 @@ tasks.named("preBuild") {
                         setPadding(0, dp(9), 0, 0)
                     }
                     card.addView(body)
-
                     val cta = Button(this).apply {
                         textSize = 11f
                         typeface = Typeface.DEFAULT_BOLD
@@ -192,7 +183,6 @@ tasks.named("preBuild") {
                         minimumHeight = 0
                     }
                     card.addView(cta, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(10) })
-
                     adView.addView(card, FrameLayout.LayoutParams(-1, -2))
                     adView.headlineView = headline
                     adView.bodyView = body
@@ -201,15 +191,12 @@ tasks.named("preBuild") {
                     adView.mediaView = media
                     adView.callToActionView = cta
                     adView.setNativeAd(nativeAd)
-
                     container.removeAllViews()
                     container.addView(adView, FrameLayout.LayoutParams(-1, -2))
                 }
             }
             .withAdListener(object : AdListener() {
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    container.visibility = View.GONE
-                }
+                override fun onAdFailedToLoad(error: LoadAdError) { container.visibility = View.GONE }
             })
             .build()
         adLoader.loadAd(AdRequest.Builder().build())
@@ -237,10 +224,7 @@ tasks.named("preBuild") {
 
     private fun __universalPdfReaderLoadInterstitial() {
         val request = AdRequest.Builder().build()
-        InterstitialAd.load(
-            this,
-            "ca-app-pub-2020382054968819/4122170223",
-            request,
+        InterstitialAd.load(this, "ca-app-pub-2020382054968819/4122170223", request,
             object : InterstitialAdLoadCallback() {
                 override fun onAdLoaded(ad: InterstitialAd) {
                     __universalPdfReaderInterstitial = ad
@@ -251,11 +235,8 @@ tasks.named("preBuild") {
                         }
                     }
                 }
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    __universalPdfReaderInterstitial = null
-                }
-            }
-        )
+                override fun onAdFailedToLoad(error: LoadAdError) { __universalPdfReaderInterstitial = null }
+            })
     }
 
     private fun __universalPdfReaderMaybeShowInterstitial() {
@@ -270,22 +251,13 @@ tasks.named("preBuild") {
 """.trimIndent()
             val classEnd = text.lastIndexOf("\n}")
             if (classEnd >= 0) text = text.substring(0, classEnd) + "\n" + interstitialCode + text.substring(classEnd)
-            text = text.replace(
-                "MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()",
-                "MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()"
-            )
         }
 
         if (!text.contains("__universalPdfReaderMaybeShowInterstitial()")) {
-            val candidates = listOf(
-                "        showReader()\n        showPage(0)",
-                "        showReader()\n        showPage(currentPage)"
-            )
+            val candidates = listOf("        showReader()\n        showPage(0)", "        showReader()\n        showPage(currentPage)")
             for (candidate in candidates) {
                 if (text.contains(candidate)) {
-                    val markerIndex = text.indexOf(candidate)
-                    val insertion = candidate + "\n        __universalPdfReaderMaybeShowInterstitial()"
-                    text = text.substring(0, markerIndex) + insertion + text.substring(markerIndex + candidate.length)
+                    text = text.replace(candidate, candidate + "\n        __universalPdfReaderMaybeShowInterstitial()")
                     break
                 }
             }
@@ -303,9 +275,7 @@ tasks.named("preBuild") {
         }
     }
 
-    override fun onBackPressed() {
-        __universalPdfReaderBackNavigation()
-    }
+    override fun onBackPressed() { __universalPdfReaderBackNavigation() }
 """.trimIndent()
             val classEnd = text.lastIndexOf("\n}")
             if (classEnd >= 0) text = text.substring(0, classEnd) + "\n" + insertion + text.substring(classEnd)
@@ -347,16 +317,9 @@ tasks.named("preBuild") {
             }
         }
 
-        // Improve swipe navigation while keeping pinch zoom and one-finger panning.
         if (!text.contains("__universalPdfReaderSwipeStartX")) {
-            text = text.replace(
-                "    private var isPinching = false\n",
-                "    private var isPinching = false\n    private var __universalPdfReaderSwipeStartX = 0f\n    private var __universalPdfReaderSwipeStartY = 0f\n"
-            )
-            text = text.replace(
-                "                lastTouchX = event.x\n                lastTouchY = event.y\n                isPanning = false",
-                "                lastTouchX = event.x\n                lastTouchY = event.y\n                __universalPdfReaderSwipeStartX = event.x\n                __universalPdfReaderSwipeStartY = event.y\n                isPanning = false"
-            )
+            text = text.replace("    private var isPinching = false\n", "    private var isPinching = false\n    private var __universalPdfReaderSwipeStartX = 0f\n    private var __universalPdfReaderSwipeStartY = 0f\n")
+            text = text.replace("                lastTouchX = event.x\n                lastTouchY = event.y\n                isPanning = false", "                lastTouchX = event.x\n                lastTouchY = event.y\n                __universalPdfReaderSwipeStartX = event.x\n                __universalPdfReaderSwipeStartY = event.y\n                isPanning = false")
             val oldUp = """            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 pinchDistance = 0f
                 isPinching = false
@@ -364,10 +327,10 @@ tasks.named("preBuild") {
                 return true
             }"""
             val newUp = """            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (event.actionMasked == MotionEvent.ACTION_UP && zoom <= 1.01f && !isPanning && !isPinching) {
+                if (event.actionMasked == MotionEvent.ACTION_UP && !isPanning && !isPinching && zoom <= 1.01f) {
                     val dx = event.x - __universalPdfReaderSwipeStartX
                     val dy = event.y - __universalPdfReaderSwipeStartY
-                    if (kotlin.math.abs(dx) >= dp(72) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.35f) {
+                    if (kotlin.math.abs(dx) >= dp(72) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
                         if (dx < 0f) showPage(currentPage + 1) else showPage(currentPage - 1)
                     }
                 }
@@ -378,21 +341,6 @@ tasks.named("preBuild") {
             }"""
             text = text.replace(oldUp, newUp)
         }
-
-        // Premium visual pass: stronger indigo identity, cleaner surfaces, and a richer reader canvas.
-        text = text.replace("Color.rgb(246, 247, 251)", "Color.rgb(244, 246, 252)")
-        text = text.replace("Color.rgb(229, 231, 237)", "Color.rgb(218, 222, 236)")
-        text = text.replace("Color.rgb(241, 240, 251)", "Color.rgb(232, 229, 252)")
-        text = text.replace("Color.rgb(238, 236, 252)", "Color.rgb(226, 222, 252)")
-        text = text.replace("Color.rgb(67, 56, 180)", "Color.rgb(78, 63, 205)")
-        text = text.replace("text = \"Read beautifully. Anywhere.\"", "text = \"Read. Search. Swipe.\"")
-
-        // Render PDF pages in print-quality mode for stronger color/graphics fidelity.
-        text = text.replace(
-            "PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY",
-            "PdfRenderer.Page.RENDER_MODE_FOR_PRINT"
-        )
-        text = text.replace("coerceIn(900, 2200)", "coerceIn(1100, 2200)")
 
         source.writeText(text)
     }
