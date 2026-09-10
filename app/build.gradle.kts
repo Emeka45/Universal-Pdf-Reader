@@ -140,7 +140,9 @@ tasks.named("preBuild") {
             )
             for (candidate in candidates) {
                 if (text.contains(candidate)) {
-                    text = text.replace(candidate, candidate + "\n        __universalPdfReaderMaybeShowInterstitial()", 1)
+                    val markerIndex = text.indexOf(candidate)
+                    val insertion = candidate + "\n        __universalPdfReaderMaybeShowInterstitial()"
+                    text = text.substring(0, markerIndex) + insertion + text.substring(markerIndex + candidate.length)
                     break
                 }
             }
