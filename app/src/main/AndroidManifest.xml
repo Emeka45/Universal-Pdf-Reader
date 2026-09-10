@@ -8,6 +8,9 @@
         android:roundIcon="@drawable/u_logo"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="false">
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-2020382054968819~1230810824" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.coeric.universalpdfreader.fileprovider"
