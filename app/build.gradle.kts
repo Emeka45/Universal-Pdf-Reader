@@ -38,6 +38,43 @@ tasks.named("preBuild") {
         }
         text = text.replace("singleLine = true", "setSingleLine(true)")
 
+        // AdMob imports and initialization. The App ID is configured in AndroidManifest.xml.
+        if (!text.contains("com.google.android.gms.ads.MobileAds")) {
+            text = text.replace(
+                "import android.widget.Toast\n",
+                "import android.widget.Toast\nimport com.google.android.gms.ads.AdRequest\nimport com.google.android.gms.ads.AdSize\nimport com.google.android.gms.ads.AdView\nimport com.google.android.gms.ads.MobileAds\n"
+            )
+        }
+        if (!text.contains("__universalPdfReaderAdMobInitialized")) {
+            text = text.replace(
+                "PDFBoxResourceLoader.init(applicationContext)\n        buildUi()",
+                "PDFBoxResourceLoader.init(applicationContext)\n        MobileAds.initialize(this)\n        buildUi()"
+            )
+        }
+
+        // Add the supplied production banner ad unit to the library only.
+        // The PDF reading surface remains ad-free.
+        if (!text.contains("__universalPdfReaderAdMobBanner")) {
+            val bannerCode = """
+
+        val __universalPdfReaderAdMobBanner = AdView(this).apply {
+            adUnitId = "ca-app-pub-2020382054968819/9681618668"
+            val adWidth = (resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt()
+            setAdSize(AdSize.getLargeAnchoredAdaptiveBannerAdSize(this@MainActivity, adWidth))
+            loadAd(AdRequest.Builder().build())
+            contentDescription = "Advertisement"
+        }
+        panel.addView(__universalPdfReaderAdMobBanner, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(8)
+        })
+""".trimIndent()
+            val marker = "        return panel"
+            val markerIndex = text.indexOf(marker)
+            if (markerIndex >= 0) {
+                text = text.substring(0, markerIndex) + bannerCode + "\n" + text.substring(markerIndex)
+            }
+        }
+
         // Android back/swipe-back returns from the reader to the in-app library
         // instead of finishing the entire Activity.
         if (!text.contains("__universalPdfReaderBackNavigation")) {
