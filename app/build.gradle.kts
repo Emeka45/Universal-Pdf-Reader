@@ -50,6 +50,14 @@ tasks.named("preBuild") {
                 "PDFBoxResourceLoader.init(applicationContext)\n        buildUi()",
                 "PDFBoxResourceLoader.init(applicationContext)\n        MobileAds.initialize(this)\n        buildUi()"
             )
+            text = text.replace(
+                "class MainActivity : Activity() {",
+                "class MainActivity : Activity() {\n    private var __universalPdfReaderInterstitial: com.google.android.gms.ads.interstitial.InterstitialAd? = null\n    private var __universalPdfReaderOpenCount = 0"
+            )
+            text = text.replace(
+                "import com.google.android.gms.ads.MobileAds\n",
+                "import com.google.android.gms.ads.MobileAds\nimport com.google.android.gms.ads.FullScreenContentCallback\nimport com.google.android.gms.ads.LoadAdError\nimport com.google.android.gms.ads.interstitial.InterstitialAd\nimport com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback\n"
+            )
         }
 
         // Add the supplied production banner ad unit to the library only.
@@ -72,6 +80,69 @@ tasks.named("preBuild") {
             val markerIndex = text.indexOf(marker)
             if (markerIndex >= 0) {
                 text = text.substring(0, markerIndex) + bannerCode + "\n" + text.substring(markerIndex)
+            }
+        }
+
+        // Load the supplied production interstitial ad unit. It is shown at a natural
+        // break after every third successful PDF open, then immediately preloads again.
+        if (!text.contains("__universalPdfReaderLoadInterstitial")) {
+            val interstitialCode = """
+
+    private fun __universalPdfReaderLoadInterstitial() {
+        val request = AdRequest.Builder().build()
+        InterstitialAd.load(
+            this,
+            "ca-app-pub-2020382054968819/4122170223",
+            request,
+            object : InterstitialAdLoadCallback() {
+                override fun onAdLoaded(ad: InterstitialAd) {
+                    __universalPdfReaderInterstitial = ad
+                    ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+                        override fun onAdDismissedFullScreenContent() {
+                            __universalPdfReaderInterstitial = null
+                            __universalPdfReaderLoadInterstitial()
+                        }
+                    }
+                }
+
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    __universalPdfReaderInterstitial = null
+                }
+            }
+        )
+    }
+
+    private fun __universalPdfReaderMaybeShowInterstitial() {
+        __universalPdfReaderOpenCount++
+        if (__universalPdfReaderOpenCount % 3 == 0) {
+            __universalPdfReaderInterstitial?.let { ad ->
+                ad.show(this)
+                __universalPdfReaderInterstitial = null
+            }
+        }
+    }
+""".trimIndent()
+            val classEnd = text.lastIndexOf("\n}")
+            if (classEnd >= 0) {
+                text = text.substring(0, classEnd) + "\n" + interstitialCode + text.substring(classEnd)
+            }
+            text = text.replace(
+                "MobileAds.initialize(this)\n        buildUi()",
+                "MobileAds.initialize(this)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()"
+            )
+        }
+
+        // Show the interstitial only after a successful PDF open, at a natural break.
+        if (!text.contains("__universalPdfReaderMaybeShowInterstitial()")) {
+            val candidates = listOf(
+                "        showReader()\n        showPage(0)",
+                "        showReader()\n        showPage(currentPage)"
+            )
+            for (candidate in candidates) {
+                if (text.contains(candidate)) {
+                    text = text.replace(candidate, candidate + "\n        __universalPdfReaderMaybeShowInterstitial()", 1)
+                    break
+                }
             }
         }
 
