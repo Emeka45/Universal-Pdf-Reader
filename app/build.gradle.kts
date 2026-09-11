@@ -208,7 +208,6 @@ tasks.named("preBuild") {
         val universalViolet = Color.rgb(119, 73, 255)
         val universalLavender = Color.rgb(238, 232, 255)
         val universalBlue = Color.rgb(35, 126, 255)
-        val universalPink = Color.rgb(225, 74, 150)
         val softSurface = Color.rgb(248, 246, 255)
         val readerSurface = Color.rgb(232, 226, 248)
         root.setBackgroundColor(softSurface)
@@ -221,7 +220,7 @@ tasks.named("preBuild") {
                     if (child is TextView) child.setTextColor(Color.WHITE)
                     if (child is Button) {
                         child.setTextColor(Color.WHITE)
-                        child.background(Color.rgb(91, 58, 220), 12)
+                        child.background = background(Color.rgb(91, 58, 220), 12)
                     }
                     if (child is LinearLayout) {
                         for (j in 0 until child.childCount) {
@@ -232,14 +231,14 @@ tasks.named("preBuild") {
                 }
             }
             searchPanel.setBackgroundColor(universalPurple)
-            searchBox.background(universalLavender, 16)
+            searchBox.background = background(universalLavender, 16)
             searchBox.setTextColor(universalDeep)
             searchBox.setHintTextColor(Color.rgb(104, 88, 160))
             toolsPanel.setBackgroundColor(Color.rgb(58, 38, 145))
             for (i in 0 until toolsPanel.childCount) {
                 val b = toolsPanel.getChildAt(i) as? Button ?: continue
                 b.setTextColor(Color.WHITE)
-                b.background(if (i % 3 == 0) universalBlue else universalViolet, 12)
+                b.background = background(if (i % 3 == 0) universalBlue else universalViolet, 12)
             }
             readerPanel.setBackgroundColor(readerSurface)
             pageLabel.setBackgroundColor(universalDeep)
