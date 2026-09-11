@@ -44,7 +44,7 @@ tasks.named("preBuild") {
         if (!text.contains("__universalPdfReaderAdMobInitialized")) {
             text = text.replace(
                 "PDFBoxResourceLoader.init(applicationContext)\n        buildUi()",
-                "PDFBoxResourceLoader.init(applicationContext)\n        MobileAds.initialize(this)\n        AppOpenAdManager.initialize(application)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()"
+                "PDFBoxResourceLoader.init(applicationContext)\n        MobileAds.initialize(this)\n        AppOpenAdManager.initialize(application)\n        __universalPdfReaderLoadInterstitial()\n        buildUi()\n        __universalPdfReaderApplyPremiumTheme()"
             )
             text = text.replace(
                 "class MainActivity : Activity() {",
@@ -199,65 +199,60 @@ tasks.named("preBuild") {
             if (classEnd >= 0) text = text.substring(0, classEnd) + "\n" + insertion + text.substring(classEnd)
         }
 
-        val searchStart = text.indexOf("    private fun searchPdf(query: String) {")
-        if (searchStart >= 0) {
-            val searchEnd = text.indexOf("\n    private fun ", searchStart + 10)
-            if (searchEnd > searchStart) {
-                val improvedSearch = """
-    private fun searchPdf(query: String) {
-        val file = pdfFile ?: run { toast("Open a PDF first"); return }
-        val normalized = query.trim().replace(Regex("\\s+"), " ")
-        if (normalized.isEmpty()) { toast("Enter a word or phrase to search"); searchBox.requestFocus(); return }
-        Thread {
-            var foundPage = -1
-            var totalPages = 0
-            try {
-                PDDocument.load(file).use { document ->
-                    totalPages = document.numberOfPages
-                    val stripper = PDFTextStripper().apply { sortByPosition = true }
-                    for (offset in 0 until totalPages) {
-                        val pageIndex = (currentPage + offset) % totalPages
-                        stripper.startPage = pageIndex + 1
-                        stripper.endPage = pageIndex + 1
-                        val pageText = stripper.getText(document).replace(Regex("\\s+"), " ").trim()
-                        if (pageText.contains(normalized, ignoreCase = true)) { foundPage = pageIndex; break }
+        if (!text.contains("private fun __universalPdfReaderApplyPremiumTheme")) {
+            val themeMethod = """
+
+    private fun __universalPdfReaderApplyPremiumTheme() {
+        val universalPurple = Color.rgb(91, 58, 220)
+        val universalDeep = Color.rgb(48, 30, 122)
+        val universalViolet = Color.rgb(119, 73, 255)
+        val universalLavender = Color.rgb(238, 232, 255)
+        val universalBlue = Color.rgb(35, 126, 255)
+        val universalPink = Color.rgb(225, 74, 150)
+        val softSurface = Color.rgb(248, 246, 255)
+        val readerSurface = Color.rgb(232, 226, 248)
+        root.setBackgroundColor(softSurface)
+        if (root.childCount >= 5) {
+            val header = root.getChildAt(0) as? LinearLayout
+            header?.setBackgroundColor(universalDeep)
+            header?.let {
+                for (i in 0 until it.childCount) {
+                    val child = it.getChildAt(i)
+                    if (child is TextView) child.setTextColor(Color.WHITE)
+                    if (child is Button) {
+                        child.setTextColor(Color.WHITE)
+                        child.background(Color.rgb(91, 58, 220), 12)
+                    }
+                    if (child is LinearLayout) {
+                        for (j in 0 until child.childCount) {
+                            val nested = child.getChildAt(j)
+                            if (nested is TextView) nested.setTextColor(if (j == 0) Color.WHITE else Color.rgb(214, 205, 255))
+                        }
                     }
                 }
-                runOnUiThread {
-                    if (foundPage >= 0) { showPage(foundPage); toast("Found \"" + normalized + "\" on page " + (foundPage + 1) + " of " + totalPages) }
-                    else toast("No matches found for \"" + normalized + "\"")
-                }
-            } catch (e: Exception) { runOnUiThread { toast("Search failed: " + (e.message ?: "unable to read this PDF")) } }
-        }.start()
+            }
+            searchPanel.setBackgroundColor(universalPurple)
+            searchBox.background(universalLavender, 16)
+            searchBox.setTextColor(universalDeep)
+            searchBox.setHintTextColor(Color.rgb(104, 88, 160))
+            toolsPanel.setBackgroundColor(Color.rgb(58, 38, 145))
+            for (i in 0 until toolsPanel.childCount) {
+                val b = toolsPanel.getChildAt(i) as? Button ?: continue
+                b.setTextColor(Color.WHITE)
+                b.background(if (i % 3 == 0) universalBlue else universalViolet, 12)
+            }
+            readerPanel.setBackgroundColor(readerSurface)
+            pageLabel.setBackgroundColor(universalDeep)
+            pageLabel.setTextColor(Color.WHITE)
+            libraryPanel.setBackgroundColor(softSurface)
+            val open = root.getChildAt(0)
+            if (open is LinearLayout && open.childCount > 0) open.getChildAt(0).setBackgroundColor(universalViolet)
+        }
+        pageImage.setBackgroundColor(Color.WHITE)
     }
 """.trimIndent()
-                text = text.substring(0, searchStart) + improvedSearch + text.substring(searchEnd)
-            }
-        }
-
-        if (!text.contains("__universalPdfReaderSwipeStartX")) {
-            text = text.replace("    private var isPinching = false\n", "    private var isPinching = false\n    private var __universalPdfReaderSwipeStartX = 0f\n    private var __universalPdfReaderSwipeStartY = 0f\n")
-            text = text.replace("                lastTouchX = event.x\n                lastTouchY = event.y\n                isPanning = false", "                lastTouchX = event.x\n                lastTouchY = event.y\n                __universalPdfReaderSwipeStartX = event.x\n                __universalPdfReaderSwipeStartY = event.y\n                isPanning = false")
-            val oldUp = """            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                pinchDistance = 0f
-                isPinching = false
-                isPanning = false
-                return true
-            }"""
-            val newUp = """            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (event.actionMasked == MotionEvent.ACTION_UP && !isPanning && !isPinching && zoom <= 1.01f) {
-                    val dx = event.x - __universalPdfReaderSwipeStartX
-                    val dy = event.y - __universalPdfReaderSwipeStartY
-                    if (kotlin.math.abs(dx) >= dp(72) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
-                        if (dx < 0f) showPage(currentPage + 1) else showPage(currentPage - 1)
-                    }
-                }
-                pinchDistance = 0f
-                isPinching = false
-                isPanning = false
-                return true
-            }"""
-            text = text.replace(oldUp, newUp)
+            val classEnd = text.lastIndexOf("\n}")
+            if (classEnd >= 0) text = text.substring(0, classEnd) + "\n" + themeMethod + text.substring(classEnd)
         }
 
         source.writeText(text)
