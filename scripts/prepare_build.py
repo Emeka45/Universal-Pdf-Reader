@@ -18,11 +18,10 @@ def patch_activity() -> None:
             'import android.os.ParcelFileDescriptor\nimport android.provider.OpenableColumns\n'
         )
 
-    helper = r'''
-    private fun displayNameForUri(uri: Uri): String {
+    helper = '''    private fun displayNameForUri(uri: Uri): String {
         val fallback = uri.lastPathSegment
             ?.substringAfterLast('/')
-            ?.takeIf { it.isNotBlank() && !it.matches(Regex("\\d+")) }
+            ?.takeIf { it.isNotBlank() && !it.matches(Regex("\\\\d+")) }
             ?: "Untitled PDF"
         return try {
             contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
@@ -34,12 +33,11 @@ def patch_activity() -> None:
         } catch (_: Exception) {
             fallback
         }
-    }
-'''.strip('\n')
+    }'''
 
     if 'private fun displayNameForUri(uri: Uri)' not in text:
         marker = '    private fun openLibraryEntry(uriString: String) = openPdf(Uri.parse(uriString), getSavedPage(uriString))'
-        text = text.replace(marker, helper + '\n\n' + marker)
+        text = text.replace(marker, helper + '\n\n' + marker, 1)
 
     text = text.replace(
         'val name = uri.lastPathSegment?.substringAfterLast(\'/\') ?: "Untitled PDF"',
@@ -70,9 +68,8 @@ def patch_gradle() -> None:
         release = '''    buildTypes {\n        getByName("release") {\n            isMinifyEnabled = false\n            isDebuggable = false\n            val propsFile = rootProject.file("release-signing.properties")\n            if (propsFile.exists()) {\n                signingConfig = signingConfigs.getByName("release")\n            }\n        }\n    }\n'''
         text = text.replace(marker, release + marker, 1)
 
-    # Make the next store submission an actual version increment.
-    text = re.sub(r'versionCode\\s*=\\s*\\d+', 'versionCode = 2', text)
-    text = re.sub(r'versionName\\s*=\\s*"[^"]+"', 'versionName = "0.2.0"', text)
+    text = re.sub(r'versionCode\s*=\s*\d+', 'versionCode = 2', text)
+    text = re.sub(r'versionName\s*=\s*"[^"]+"', 'versionName = "0.2.0"', text)
     GRADLE.write_text(text, encoding='utf-8')
 
 
@@ -87,7 +84,7 @@ def prepare_keystore() -> bool:
     props.write_text(
         'storeFile=app/release-keystore.jks\n'
         f'storePassword={os.environ.get("RELEASE_STORE_PASSWORD", "")}\n'
-        f'keyAlias={os.environ.get("RELEASE_KEY_ALIAS", "") }\n'
+        f'keyAlias={os.environ.get("RELEASE_KEY_ALIAS", "")}\n'
         f'keyPassword={os.environ.get("RELEASE_KEY_PASSWORD", "")}\n',
         encoding='utf-8'
     )
