@@ -12,6 +12,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+      RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -23,11 +28,6 @@ jobs:
           java-version: '17'
 
       - name: Prepare PDF filename and release build
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: python3 scripts/prepare_build.py
 
       - name: Build debug APK
@@ -40,8 +40,6 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
 
       - name: Build signed release APK when release key is configured
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
           if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
             echo "Release signing key is not configured yet. Debug build completed; no store APK was produced."
@@ -51,8 +49,6 @@ jobs:
 
       - name: Verify release APK signature
         if: ${{ env.RELEASE_KEYSTORE_BASE64 != '' }}
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
           if [ -z "$APK" ]; then
@@ -63,8 +59,6 @@ jobs:
 
       - name: Upload signed release APK
         if: ${{ env.RELEASE_KEYSTORE_BASE64 != '' }}
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         uses: actions/upload-artifact@v4
         with:
           name: universal-pdf-reader-release
