@@ -30,6 +30,9 @@ jobs:
       - name: Prepare PDF filename and release build
         run: python3 scripts/prepare_build.py
 
+      - name: Normalize Kotlin DSL JDK properties reference
+        run: sed -i 's/java\.util\.Properties()/Properties()/g' app/build.gradle.kts
+
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon
 
