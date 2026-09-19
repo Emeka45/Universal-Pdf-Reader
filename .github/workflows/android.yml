@@ -50,12 +50,10 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for name in RELEASE_KEYSTORE_BASE64 RELEASE_STORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "ERROR: Required release signing secret $name is not configured."
-              missing=1
-            fi
-          done
+          if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then echo "ERROR: RELEASE_KEYSTORE_BASE64 is not configured."; missing=1; fi
+          if [ -z "$RELEASE_STORE_PASSWORD" ]; then echo "ERROR: RELEASE_STORE_PASSWORD is not configured."; missing=1; fi
+          if [ -z "$RELEASE_KEY_ALIAS" ]; then echo "ERROR: RELEASE_KEY_ALIAS is not configured."; missing=1; fi
+          if [ -z "$RELEASE_KEY_PASSWORD" ]; then echo "ERROR: RELEASE_KEY_PASSWORD is not configured."; missing=1; fi
           if [ "$missing" -ne 0 ]; then
             echo "Configure all four release signing secrets before running a store release."
             exit 1
