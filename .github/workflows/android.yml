@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -42,16 +43,17 @@ jobs:
           name: universal-pdf-reader-debug
           path: app/build/outputs/apk/debug/*.apk
 
-      - name: Build signed release APK when release key is configured
+      - name: Require release signing configuration
         run: |
           if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
-            echo "Release signing key is not configured yet. Debug build completed; no store APK was produced."
-            exit 0
+            echo "ERROR: Release signing key is not configured. Refusing to treat a debug APK as a store release."
+            exit 1
           fi
-          gradle assembleRelease --no-daemon
+
+      - name: Build signed release APK
+        run: gradle assembleRelease --no-daemon
 
       - name: Verify release APK signature
-        if: ${{ env.RELEASE_KEYSTORE_BASE64 != '' }}
         run: |
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
           if [ -z "$APK" ]; then
@@ -61,7 +63,6 @@ jobs:
           $ANDROID_HOME/build-tools/36.0.0/apksigner verify --verbose "$APK"
 
       - name: Upload signed release APK
-        if: ${{ env.RELEASE_KEYSTORE_BASE64 != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: universal-pdf-reader-release
