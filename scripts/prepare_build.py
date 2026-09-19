@@ -2,6 +2,7 @@ from pathlib import Path
 import base64
 import os
 import re
+import binascii
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'app'
@@ -75,17 +76,28 @@ def patch_gradle() -> None:
 
 def prepare_keystore() -> bool:
     encoded = os.environ.get('RELEASE_KEYSTORE_BASE64', '').strip()
+    password = os.environ.get('RELEASE_STORE_PASSWORD', '').strip()
+    alias = os.environ.get('RELEASE_KEY_ALIAS', '').strip()
+    key_password = os.environ.get('RELEASE_KEY_PASSWORD', '').strip()
+
     if not encoded:
         return False
-    data = base64.b64decode(encoded)
+    if not password or not alias or not key_password:
+        raise SystemExit('Release signing is incomplete: all four RELEASE_* secrets are required.')
+
+    try:
+        data = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise SystemExit(f'RELEASE_KEYSTORE_BASE64 is not valid base64: {exc}') from exc
+
     key_path = APP / 'release-keystore.jks'
     key_path.write_bytes(data)
     props = ROOT / 'release-signing.properties'
     props.write_text(
         'storeFile=app/release-keystore.jks\n'
-        f'storePassword={os.environ.get("RELEASE_STORE_PASSWORD", "")}\n'
-        f'keyAlias={os.environ.get("RELEASE_KEY_ALIAS", "")}\n'
-        f'keyPassword={os.environ.get("RELEASE_KEY_PASSWORD", "")}\n',
+        f'storePassword={password}\n'
+        f'keyAlias={alias}\n'
+        f'keyPassword={key_password}\n',
         encoding='utf-8'
     )
     return True
@@ -95,6 +107,6 @@ patch_activity()
 patch_gradle()
 print('PDF filename preservation patch applied.')
 if prepare_keystore():
-    print('Release signing keystore loaded from GitHub Actions secret.')
+    print('Release signing configuration prepared.')
 else:
-    print('No release keystore secret supplied; debug build can run, store release will be skipped.')
+    print('No release keystore supplied; release signing will be blocked by the workflow.')
