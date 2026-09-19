@@ -1,0 +1,13 @@
+# Android / Gradle
+.gradle/
+build/
+**/build/
+local.properties
+
+# Release signing material — NEVER commit these
+app/release-keystore.jks
+release-signing.properties
+
+# IDE
+.idea/
+*.iml
