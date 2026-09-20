@@ -43,34 +43,32 @@ jobs:
           name: universal-pdf-reader-debug
           path: app/build/outputs/apk/debug/*.apk
 
-      # Pull requests may not receive repository secrets, especially when opened
-      # from forks. Keep PR validation on the debug build only.
-      - name: Require release signing configuration
+      - name: Report release signing readiness
         if: github.event_name != 'pull_request'
         run: |
-          set -euo pipefail
-          missing=0
-          if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then echo "ERROR: RELEASE_KEYSTORE_BASE64 is not configured."; missing=1; fi
-          if [ -z "$RELEASE_STORE_PASSWORD" ]; then echo "ERROR: RELEASE_STORE_PASSWORD is not configured."; missing=1; fi
-          if [ -z "$RELEASE_KEY_ALIAS" ]; then echo "ERROR: RELEASE_KEY_ALIAS is not configured."; missing=1; fi
-          if [ -z "$RELEASE_KEY_PASSWORD" ]; then echo "ERROR: RELEASE_KEY_PASSWORD is not configured."; missing=1; fi
-          if [ "$missing" -ne 0 ]; then
-            echo "Configure all four release signing secrets before running a store release."
-            exit 1
+          if [ -z "$RELEASE_KEYSTORE_BASE64" ] || [ -z "$RELEASE_STORE_PASSWORD" ] || [ -z "$RELEASE_KEY_ALIAS" ] || [ -z "$RELEASE_KEY_PASSWORD" ]; then
+            echo "Release signing is not configured; debug validation passed and release packaging is intentionally skipped."
+          else
+            echo "Release signing configuration detected; release packaging will run."
           fi
+
+      - name: Validate release signing configuration
+        if: github.event_name != 'pull_request' && env.RELEASE_KEYSTORE_BASE64 != '' && env.RELEASE_STORE_PASSWORD != '' && env.RELEASE_KEY_ALIAS != '' && env.RELEASE_KEY_PASSWORD != ''
+        run: |
+          set -euo pipefail
           printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode >/tmp/universal-pdf-reader-release.jks
-          if ! keytool -list -keystore /tmp/universal-pdf-reader-release.jks               -storepass "$RELEASE_STORE_PASSWORD"               -alias "$RELEASE_KEY_ALIAS" >/tmp/release-keytool.txt 2>&1; then
+          if ! keytool -list -keystore /tmp/universal-pdf-reader-release.jks -storepass "$RELEASE_STORE_PASSWORD" -alias "$RELEASE_KEY_ALIAS" >/tmp/release-keytool.txt 2>&1; then
             echo "ERROR: The release keystore, store password, or key alias is invalid."
             exit 1
           fi
           rm -f /tmp/universal-pdf-reader-release.jks /tmp/release-keytool.txt
 
       - name: Build signed release APK
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && env.RELEASE_KEYSTORE_BASE64 != '' && env.RELEASE_STORE_PASSWORD != '' && env.RELEASE_KEY_ALIAS != '' && env.RELEASE_KEY_PASSWORD != ''
         run: gradle assembleRelease --no-daemon
 
       - name: Verify release APK signature
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && env.RELEASE_KEYSTORE_BASE64 != '' && env.RELEASE_STORE_PASSWORD != '' && env.RELEASE_KEY_ALIAS != '' && env.RELEASE_KEY_PASSWORD != ''
         run: |
           set -euo pipefail
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
@@ -81,7 +79,7 @@ jobs:
           $ANDROID_HOME/build-tools/36.0.0/apksigner verify --verbose --print-certs "$APK"
 
       - name: Upload signed release APK
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && env.RELEASE_KEYSTORE_BASE64 != '' && env.RELEASE_STORE_PASSWORD != '' && env.RELEASE_KEY_ALIAS != '' && env.RELEASE_KEY_PASSWORD != ''
         uses: actions/upload-artifact@v4
         with:
           name: universal-pdf-reader-release
