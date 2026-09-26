@@ -324,6 +324,8 @@ class MainActivity : Activity() {
         accent.addView(textContainer, LinearLayout.LayoutParams(0, -2, 1f))
         panel.addView(accent, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
 
+        panel.addView(action("PRIVACY POLICY") { openPrivacyPolicy() }, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(10) })
+
         panel.addView(TextView(this).apply {
             text = "RECENT DOCUMENTS"
             textSize = 11f
@@ -365,6 +367,14 @@ class MainActivity : Activity() {
             setPadding(0, dp(4), 0, 0)
         })
         return panel
+    }
+
+    private fun openPrivacyPolicy() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_POLICY_URL)))
+        } catch (_: Exception) {
+            toast("Unable to open privacy policy")
+        }
     }
 
     private fun addTool(label: String, description: String, click: () -> Unit) {
@@ -634,6 +644,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_OPEN = 1001
+        private const val PRIVACY_POLICY_URL = "https://emeka45.github.io/universal-pdf-reader-privacy-policy.html"
         private const val PREFS = "universal_pdf_reader"
         private const val KEY_LIBRARY = "library"
         private const val PAGE_PREFIX = "page_"
