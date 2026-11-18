@@ -9,6 +9,8 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
+import android.os.StatFs
+import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -532,6 +534,14 @@ class MainActivity : Activity() {
             closePdf()
             val destination = File.createTempFile("reader_", ".pdf", cacheDir)
             try {
+                val expectedSize = contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+                }
+                val availableBytes = StatFs(cacheDir.absolutePath).availableBytes
+                val safetyReserve = 16L * 1024L * 1024L
+                if (expectedSize != null && expectedSize > 0L && expectedSize > availableBytes - safetyReserve) {
+                    throw IllegalStateException("Not enough storage space to open this PDF. Free up space and try again.")
+                }
                 val copied = contentResolver.openInputStream(uri)?.use { input ->
                     FileOutputStream(destination).use { output -> input.copyTo(output, 64 * 1024) }
                 } ?: throw IllegalStateException("Unable to read PDF")
