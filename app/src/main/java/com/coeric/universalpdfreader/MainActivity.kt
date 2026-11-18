@@ -561,9 +561,10 @@ class MainActivity : Activity() {
                 val targetWidth = (resources.displayMetrics.widthPixels * 1.5f).toInt().coerceIn(720, 1600)
                 val width = minOf(page.width, targetWidth).coerceAtLeast(1)
                 val height = (page.height.toFloat() / page.width * width).toInt().coerceAtLeast(1)
-                bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                bitmap.eraseColor(Color.WHITE)
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                val renderedBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                bitmap = renderedBitmap
+                renderedBitmap.eraseColor(Color.WHITE)
+                page.render(renderedBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             } finally {
                 page.close()
             }
