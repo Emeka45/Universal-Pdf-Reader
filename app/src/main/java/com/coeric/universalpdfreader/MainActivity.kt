@@ -531,6 +531,7 @@ class MainActivity : Activity() {
             currentUri = uri
             descriptor = ParcelFileDescriptor.open(destination, ParcelFileDescriptor.MODE_READ_ONLY)
             renderer = PdfRenderer(descriptor!!)
+            if (renderer!!.pageCount <= 0) throw IllegalStateException("PDF contains no pages")
             currentPage = requestedPage.coerceIn(0, renderer!!.pageCount - 1)
             zoom = 1f
             rotation = 0f
@@ -549,12 +550,18 @@ class MainActivity : Activity() {
         if (index !in 0 until r.pageCount) return
         try {
             val page = r.openPage(index)
-            val width = (page.width * resources.displayMetrics.density).toInt().coerceIn(900, 2200)
-            val height = (page.height.toFloat() / page.width * width).toInt().coerceAtLeast(1)
-            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            bitmap.eraseColor(Color.WHITE)
-            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            page.close()
+            var bitmap: Bitmap? = null
+            try {
+                // Render at a capped resolution to reduce memory pressure on low-end phones.
+                val targetWidth = (resources.displayMetrics.widthPixels * 1.5f).toInt().coerceIn(720, 1600)
+                val width = minOf(page.width, targetWidth).coerceAtLeast(1)
+                val height = (page.height.toFloat() / page.width * width).toInt().coerceAtLeast(1)
+                bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(Color.WHITE)
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            } finally {
+                page.close()
+            }
             currentBitmap?.recycle()
             currentBitmap = bitmap
             currentPage = index
@@ -634,6 +641,11 @@ class MainActivity : Activity() {
         currentBitmap?.recycle(); currentBitmap = null
         pdfFile?.delete(); pdfFile = null; currentUri = null
         if (::pageImage.isInitialized) resetPageTransform()
+    }
+
+    override fun onDestroy() {
+        closePdf()
+        super.onDestroy()
     }
 
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
