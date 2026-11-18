@@ -529,9 +529,18 @@ class MainActivity : Activity() {
         try {
             closePdf()
             val destination = File.createTempFile("reader_", ".pdf", cacheDir)
-            contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(destination).use { output -> input.copyTo(output) } }
-                ?: throw IllegalStateException("Unable to read PDF")
-            pdfFile = destination
+            try {
+                val copied = contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(destination).use { output -> input.copyTo(output, 64 * 1024) }
+                } ?: throw IllegalStateException("Unable to read PDF")
+                if (copied <= 0L || destination.length() <= 0L) {
+                    throw IllegalStateException("The selected PDF is empty")
+                }
+                pdfFile = destination
+            } catch (error: Exception) {
+                destination.delete()
+                throw error
+            }
             currentUri = uri
             descriptor = ParcelFileDescriptor.open(destination, ParcelFileDescriptor.MODE_READ_ONLY)
             renderer = PdfRenderer(descriptor!!)
