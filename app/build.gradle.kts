@@ -141,7 +141,13 @@ tasks.named("preBuild") {
         }
 
         if (!text.contains("__universalPdfReaderNativeAd?.destroy()")) {
-            val destroyMethod = """
+            if (text.contains("override fun onDestroy() {")) {
+                text = text.replace(
+                    "override fun onDestroy() {",
+                    "override fun onDestroy() {\\n        __universalPdfReaderNativeAd?.destroy()\\n        __universalPdfReaderNativeAd = null"
+                )
+            } else {
+                val destroyMethod = """
 
     override fun onDestroy() {
         __universalPdfReaderNativeAd?.destroy()
@@ -149,8 +155,9 @@ tasks.named("preBuild") {
         super.onDestroy()
     }
 """.trimIndent()
-            val classEnd = text.lastIndexOf("\n}")
-            if (classEnd >= 0) text = text.substring(0, classEnd) + "\n" + destroyMethod + text.substring(classEnd)
+                val classEnd = text.lastIndexOf("\\n}")
+                if (classEnd >= 0) text = text.substring(0, classEnd) + "\\n" + destroyMethod + text.substring(classEnd)
+            }
         }
 
         if (!text.contains("private fun __universalPdfReaderLoadInterstitial")) {
