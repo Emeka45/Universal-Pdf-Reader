@@ -48,6 +48,9 @@ class MainActivity : Activity() {
     private var zoom = 1f
     private var rotation = 0f
     private var currentUri: Uri? = null
+    private var searchResults: List<Int> = emptyList()
+    private var searchResultIndex = -1
+    private var searchGeneration = 0
 
     private var lastTouchX = 0f
     private var lastTouchY = 0f
@@ -129,7 +132,8 @@ class MainActivity : Activity() {
             background(Color.WHITE, 14)
         }
         searchPanel.addView(searchBox, LinearLayout.LayoutParams(0, dp(46), 1f))
-        searchPanel.addView(action("SEARCH") { searchPdf(searchBox.text.toString()) }, LinearLayout.LayoutParams(dp(82), dp(46)).apply { leftMargin = dp(8) })
+        searchPanel.addView(action("SEARCH") { searchPdf(searchBox.text.toString()) }, LinearLayout.LayoutParams(dp(76), dp(46)).apply { leftMargin = dp(8) })
+        searchPanel.addView(action("NEXT") { nextSearchMatch() }, LinearLayout.LayoutParams(dp(62), dp(46)).apply { leftMargin = dp(5) })
         root.addView(searchPanel)
 
         toolsPanel = LinearLayout(this).apply {
@@ -610,23 +614,58 @@ class MainActivity : Activity() {
     private fun searchPdf(query: String) {
         val file = pdfFile ?: run { toast("Open a PDF first"); return }
         val normalized = query.trim()
-        if (normalized.isEmpty()) return
+        if (normalized.isEmpty()) { toast("Enter text to search"); return }
+        if (!file.exists()) { toast("PDF file is no longer available"); return }
+
+        val generation = ++searchGeneration
+        searchResults = emptyList()
+        searchResultIndex = -1
+        toast("Searching PDF…")
         Thread {
             try {
+                val matches = mutableListOf<Int>()
                 PDDocument.load(file).use { document ->
                     val stripper = PDFTextStripper()
-                    var found = -1
                     for (page in 1..document.numberOfPages) {
-                        stripper.startPage = page; stripper.endPage = page
-                        if (stripper.getText(document).contains(normalized, ignoreCase = true)) { found = page - 1; break }
+                        stripper.startPage = page
+                        stripper.endPage = page
+                        if (stripper.getText(document).contains(normalized, ignoreCase = true)) {
+                            matches.add(page - 1)
+                        }
                     }
-                    runOnUiThread { if (found >= 0) showPage(found) else toast("No matches found") }
                 }
-            } catch (e: Exception) { runOnUiThread { toast("Search failed: ${e.message ?: "unknown error"}") } }
+                runOnUiThread {
+                    if (generation != searchGeneration || isFinishing || isDestroyed) return@runOnUiThread
+                    searchResults = matches
+                    searchResultIndex = if (matches.isNotEmpty()) 0 else -1
+                    if (matches.isNotEmpty()) {
+                        showPage(matches[0])
+                        toast("${matches.size} matching page(s) found. Use NEXT to move through them.")
+                    } else {
+                        toast("No matches found")
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    if (generation == searchGeneration && !isFinishing && !isDestroyed) {
+                        toast("Search failed: ${e.message ?: "unknown error"}")
+                    }
+                }
+            }
         }.start()
     }
 
-    private fun sharePdf() {
+    private fun nextSearchMatch() {
+        if (searchResults.isEmpty()) {
+            toast("Search for text first")
+            return
+        }
+        searchResultIndex = (searchResultIndex + 1) % searchResults.size
+        showPage(searchResults[searchResultIndex])
+        toast("Match ${searchResultIndex + 1} of ${searchResults.size}")
+    }
+
+        private fun sharePdf() {
         val file = pdfFile ?: run { toast("Open a PDF first"); return }
         try {
             val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
@@ -637,6 +676,9 @@ class MainActivity : Activity() {
     }
 
     private fun closePdf() {
+        searchGeneration++
+        searchResults = emptyList()
+        searchResultIndex = -1
         try { renderer?.close() } catch (_: Exception) { }
         try { descriptor?.close() } catch (_: Exception) { }
         renderer = null; descriptor = null
