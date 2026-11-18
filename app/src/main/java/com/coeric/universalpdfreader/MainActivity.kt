@@ -541,6 +541,7 @@ class MainActivity : Activity() {
             showReader()
             showPage(currentPage)
         } catch (e: Exception) {
+            closePdf()
             toast("Could not open PDF: ${e.message ?: "unknown error"}")
         }
     }
@@ -570,6 +571,9 @@ class MainActivity : Activity() {
             applyTransform()
             updateLabel()
         } catch (e: Exception) {
+            currentBitmap?.recycle()
+            currentBitmap = null
+            pageImage.setImageDrawable(null)
             toast("Could not render page: ${e.message ?: "unknown error"}")
         }
     }
