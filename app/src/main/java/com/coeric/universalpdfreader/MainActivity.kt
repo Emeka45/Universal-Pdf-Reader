@@ -549,9 +549,9 @@ class MainActivity : Activity() {
     private fun showPage(index: Int) {
         val r = renderer ?: return
         if (index !in 0 until r.pageCount) return
+        var bitmap: Bitmap? = null
         try {
             val page = r.openPage(index)
-            var bitmap: Bitmap? = null
             try {
                 // Render at a capped resolution to reduce memory pressure on low-end phones.
                 val targetWidth = (resources.displayMetrics.widthPixels * 1.5f).toInt().coerceIn(720, 1600)
@@ -571,9 +571,7 @@ class MainActivity : Activity() {
             applyTransform()
             updateLabel()
         } catch (e: Exception) {
-            currentBitmap?.recycle()
-            currentBitmap = null
-            pageImage.setImageDrawable(null)
+            bitmap?.recycle()
             toast("Could not render page: ${e.message ?: "unknown error"}")
         }
     }
