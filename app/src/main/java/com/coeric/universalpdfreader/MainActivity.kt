@@ -51,6 +51,7 @@ class MainActivity : Activity() {
     private var searchResults: List<Int> = emptyList()
     private var searchResultIndex = -1
     private var searchGeneration = 0
+    private var searchThread: Thread? = null
 
     private var lastTouchX = 0f
     private var lastTouchY = 0f
@@ -65,6 +66,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         PDFBoxResourceLoader.init(applicationContext)
+        cacheDir.listFiles()?.filter { it.isFile && it.name.startsWith("reader_") && it.name.endsWith(".pdf") }?.forEach { it.delete() }
         buildUi()
         showLibrary()
     }
@@ -628,6 +630,7 @@ class MainActivity : Activity() {
         if (!file.exists()) { toast("PDF file is no longer available"); return }
 
         val generation = ++searchGeneration
+        searchThread?.interrupt()
         searchResults = emptyList()
         searchResultIndex = -1
         toast("Searching PDF…")
@@ -637,6 +640,7 @@ class MainActivity : Activity() {
                 PDDocument.load(file).use { document ->
                     val stripper = PDFTextStripper()
                     for (page in 1..document.numberOfPages) {
+                        if (Thread.currentThread().isInterrupted) throw InterruptedException("Search cancelled")
                         stripper.startPage = page
                         stripper.endPage = page
                         if (stripper.getText(document).contains(normalized, ignoreCase = true)) {
@@ -646,6 +650,7 @@ class MainActivity : Activity() {
                 }
                 runOnUiThread {
                     if (generation != searchGeneration || isFinishing || isDestroyed) return@runOnUiThread
+                    searchThread = null
                     searchResults = matches
                     searchResultIndex = if (matches.isNotEmpty()) 0 else -1
                     if (matches.isNotEmpty()) {
@@ -658,11 +663,12 @@ class MainActivity : Activity() {
             } catch (e: Exception) {
                 runOnUiThread {
                     if (generation == searchGeneration && !isFinishing && !isDestroyed) {
+                        searchThread = null
                         toast("Search failed: ${e.message ?: "unknown error"}")
                     }
                 }
             }
-        }.start()
+        }.also { searchThread = it }.start()
     }
 
     private fun nextSearchMatch() {
@@ -687,6 +693,8 @@ class MainActivity : Activity() {
 
     private fun closePdf() {
         searchGeneration++
+        searchThread?.interrupt()
+        searchThread = null
         searchResults = emptyList()
         searchResultIndex = -1
         try { renderer?.close() } catch (_: Exception) { }
